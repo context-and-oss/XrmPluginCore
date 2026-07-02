@@ -176,6 +176,82 @@ public class CustomApiHandlerDiagnosticsTests : CodeFixTestBase
 	}
 
 	[Fact]
+	public async Task Should_Report_XPC3007_For_Action_Overload_With_Parameters()
+	{
+		const string registration = """
+			            RegisterAPI<CallbackService>(nameof(SomeApi), s => s.Handle())
+			                .AddRequestParameter("EntityId", CustomApiParameterType.Guid)
+			                .AddResponseProperty("StatusCode", CustomApiParameterType.Integer);
+			""";
+		var source = WrapPlugin(registration, serviceBody: "public void Handle() { }");
+
+		var diagnostics = await GetDiagnosticsAsync(source, new PreferTypedCustomApiHandlerAnalyzer());
+
+		var diagnostic = diagnostics.Should().ContainSingle(d => d.Id == "XPC3007").Subject;
+		diagnostic.Severity.Should().Be(DiagnosticSeverity.Info);
+		diagnostic.Properties["ServiceType"].Should().Be("CallbackService");
+		diagnostic.Properties["MethodName"].Should().Be("Handle");
+	}
+
+	[Fact]
+	public async Task Should_Report_XPC3007_When_Only_Response_Declared()
+	{
+		const string registration = """
+			            RegisterAPI<CallbackService>(nameof(SomeApi), s => s.Handle())
+			                .AddResponseProperty("StatusCode", CustomApiParameterType.Integer);
+			""";
+		var source = WrapPlugin(registration, serviceBody: "public void Handle() { }");
+
+		var diagnostics = await GetDiagnosticsAsync(source, new PreferTypedCustomApiHandlerAnalyzer());
+
+		diagnostics.Should().ContainSingle(d => d.Id == "XPC3007");
+	}
+
+	[Fact]
+	public async Task Should_Not_Report_XPC3007_When_No_Parameters_Declared()
+	{
+		const string registration = """
+			            RegisterAPI<CallbackService>(nameof(SomeApi), s => s.Handle());
+			""";
+		var source = WrapPlugin(registration, serviceBody: "public void Handle() { }");
+
+		var diagnostics = await GetDiagnosticsAsync(source, new PreferTypedCustomApiHandlerAnalyzer());
+
+		diagnostics.Should().NotContain(d => d.Id == "XPC3007");
+	}
+
+	[Fact]
+	public async Task Should_Not_Report_XPC3007_For_Typed_Handler_Overload()
+	{
+		var source = WrapPlugin(RegistrationWithParams, serviceBody: "public SomeApiResponse Handle(SomeApiRequest request) => new SomeApiResponse(0);")
+			+ GeneratedTypes;
+
+		var diagnostics = await GetDiagnosticsAsync(source, new PreferTypedCustomApiHandlerAnalyzer());
+
+		diagnostics.Should().NotContain(d => d.Id == "XPC3007");
+	}
+
+	[Fact]
+	public async Task Should_Fix_Action_Overload_To_Nameof()
+	{
+		const string registration = """
+			            RegisterAPI<CallbackService>(nameof(SomeApi), s => s.Handle())
+			                .AddRequestParameter("EntityId", CustomApiParameterType.Guid)
+			                .AddResponseProperty("StatusCode", CustomApiParameterType.Integer);
+			""";
+		var source = WrapPlugin(registration, serviceBody: "public void Handle() { }");
+
+		var fixedSource = await ApplyCodeFixAsync(
+			source,
+			new PreferTypedCustomApiHandlerAnalyzer(),
+			new PreferTypedCustomApiHandlerCodeFixProvider(),
+			DiagnosticDescriptors.PreferTypedCustomApiHandler.Id);
+
+		fixedSource.Should().Contain("nameof(CallbackService.Handle)");
+		fixedSource.Should().NotContain("s => s.Handle()");
+	}
+
+	[Fact]
 	public async Task Should_Fix_Missing_Handler_Method()
 	{
 		var source = WrapPlugin(RegistrationWithParams, serviceBody: "// no methods");

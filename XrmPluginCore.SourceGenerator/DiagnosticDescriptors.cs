@@ -108,6 +108,16 @@ public static class DiagnosticDescriptors
 		description: "The typed RegisterAPI<TService>(name, handlerMethodName) overload requires a constant name so the generated classes can be named after the API. A non-constant name produces no generated ActionWrapper and fails at runtime.",
 		helpLinkUri: $"{HelpLinkBaseUri}/XPC3006.md");
 
+	public static readonly DiagnosticDescriptor PreferTypedCustomApiHandler = new(
+		id: "XPC3007",
+		title: "Prefer the type-safe Custom API handler overload",
+		messageFormat: "This Custom API declares request/response parameters; use 'RegisterAPI<{0}>(name, nameof({0}.Handler))' to generate strongly-typed request/response DTOs instead of the action-based overload",
+		category: Category,
+		defaultSeverity: DiagnosticSeverity.Info,
+		isEnabledByDefault: true,
+		description: "When a Custom API declares AddRequestParameter/AddResponseProperty, the typed RegisterAPI<TService>(name, handlerMethodName) overload generates strongly-typed {ApiName}Request/{ApiName}Response classes and marshals InputParameters/OutputParameters for you. The action-based overload leaves you to read and write those dictionaries by hand.",
+		helpLinkUri: $"{HelpLinkBaseUri}/XPC3007.md");
+
 	public static readonly DiagnosticDescriptor CustomApiHandlerMethodNotFound = new(
 		id: "XPC4004",
 		title: "Custom API handler method not found",

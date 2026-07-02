@@ -53,11 +53,61 @@ internal static class RegisterApiHelper
 	}
 
 	/// <summary>
+	/// Determines whether the invocation binds to a generic action overload
+	/// <c>RegisterAPI&lt;TService&gt;(string name, Action&lt;TService&gt; action)</c> (vs the typed handler-name
+	/// overload). This is the overload that does NOT generate request/response DTOs.
+	/// </summary>
+	public static bool IsActionOverload(InvocationExpressionSyntax invocation, SemanticModel semanticModel)
+	{
+		var method = ResolveMethod(invocation, semanticModel);
+		return method != null
+			&& method.Parameters.Length == 2
+			&& method.Parameters[1].Type.TypeKind == TypeKind.Delegate;
+	}
+
+	/// <summary>
 	/// Returns the <c>name</c> argument expression, resolved by parameter name (so named/reordered
 	/// arguments are honored). Returns null when absent.
 	/// </summary>
 	public static ExpressionSyntax GetNameArgument(InvocationExpressionSyntax invocation, SemanticModel semanticModel)
 		=> ArgumentBinder.GetArgument(invocation, semanticModel, Constants.ParameterName);
+
+	/// <summary>
+	/// Returns the <c>action</c> argument expression (the delegate/lambda), resolved by parameter name.
+	/// Returns null when absent.
+	/// </summary>
+	public static ExpressionSyntax GetActionArgument(InvocationExpressionSyntax invocation, SemanticModel semanticModel)
+		=> ArgumentBinder.GetArgument(invocation, semanticModel, Constants.ParameterAction);
+
+	/// <summary>
+	/// Extracts the handler method name from an action lambda such as <c>s =&gt; s.Handle()</c> or
+	/// <c>s =&gt; s.Handle</c>. Returns null when the lambda body is not a single call to a member of the
+	/// lambda parameter (e.g. a statement block or a more complex expression).
+	/// </summary>
+	public static string GetActionMethodName(ExpressionSyntax actionArgument)
+	{
+		var body = actionArgument switch
+		{
+			SimpleLambdaExpressionSyntax simpleLambda => simpleLambda.Body,
+			ParenthesizedLambdaExpressionSyntax parenLambda => parenLambda.Body,
+			_ => null,
+		};
+
+		// s => s.Handle()  — body is an invocation of a member access
+		if (body is InvocationExpressionSyntax bodyInvocation &&
+			bodyInvocation.Expression is MemberAccessExpressionSyntax invokedMember)
+		{
+			return invokedMember.Name.Identifier.Text;
+		}
+
+		// s => s.Handle  — body is a bare member access (method group)
+		if (body is MemberAccessExpressionSyntax memberAccess)
+		{
+			return memberAccess.Name.Identifier.Text;
+		}
+
+		return null;
+	}
 
 	/// <summary>
 	/// Returns the <c>handlerMethodName</c> argument expression, resolved by parameter name. Returns null

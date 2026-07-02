@@ -338,6 +338,7 @@ public class CallbackService
 | XPC4004 | Error | Custom API handler method not found on the service type (code fix creates it) |
 | XPC4005 | Warning | Handler signature doesn't match the declared parameters, generated types don't exist yet |
 | XPC4006 | Error | Handler signature doesn't match, generated types exist (code fix corrects it) |
+| XPC3007 | Info | A Custom API declares request/response parameters but uses the action-based overload; prefer the typed `RegisterAPI<TService>(name, nameof(TService.Method))` overload that generates DTOs (code fix converts the lambda to `nameof`) |
 | XPC3001 | Warning | Prefer `nameof(TService.Method)` over a string literal for the handler argument |
 
 ### Dependency Injection
@@ -490,6 +491,10 @@ Version numbers are managed through CHANGELOG.md files:
 - `XrmPluginCore.Abstractions/CHANGELOG.md` for abstractions
 
 `Directory.Build.targets` derives each project's `<Version>` from the latest `### v...` entry in the relevant CHANGELOG.md at build time — no script or CI step required. Core and the source generator share `XrmPluginCore/CHANGELOG.md`; Abstractions overrides `ChangelogPath` in its .csproj to use its own changelog. An explicit `-p:Version=...` still overrides the derived value.
+
+The pending (not-yet-released) entry is marked `### vX.Y.Z - Unreleased` instead of a date. Only the version number is parsed (the ` - Unreleased`/date suffix is ignored), so this doesn't affect the derived `<Version>`. Add new changes to that existing `- Unreleased` entry rather than creating a new heading; when the version is released, replace `Unreleased` with the release date.
+
+Analyzer rules are tracked separately in `XrmPluginCore.SourceGenerator/AnalyzerReleases.Unshipped.md`; new rules go there and are moved to `AnalyzerReleases.Shipped.md` (under a `## Release X.Y.Z` heading) when that version is released.
 
 ## Source Generator Development
 

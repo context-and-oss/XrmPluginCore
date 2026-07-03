@@ -45,6 +45,20 @@ public class CreateHandlerMethodCodeFixProvider : CodeFixProvider
 		diagnostic.Properties.TryGetValue(Constants.PropertyPreImageType, out var preImageType);
 		diagnostic.Properties.TryGetValue(Constants.PropertyPostImageType, out var postImageType);
 
+		// The analyzer reports HasPreImage/HasPostImage unconditionally but only supplies the generated
+		// wrapper type name when it can resolve it. If an image is registered but its type name is
+		// missing, we can't emit a correct signature — don't offer a fix that would create a
+		// permanently mismatched, param-less method.
+		diagnostic.Properties.TryGetValue(Constants.PropertyHasPreImage, out var expectsPreImageStr);
+		diagnostic.Properties.TryGetValue(Constants.PropertyHasPostImage, out var expectsPostImageStr);
+		var expectsPreImage = bool.TryParse(expectsPreImageStr, out var ep) && ep;
+		var expectsPostImage = bool.TryParse(expectsPostImageStr, out var eq) && eq;
+		if ((expectsPreImage && string.IsNullOrEmpty(preImageType)) ||
+			(expectsPostImage && string.IsNullOrEmpty(postImageType)))
+		{
+			return;
+		}
+
 		var hasPreImage = !string.IsNullOrEmpty(preImageType);
 		var hasPostImage = !string.IsNullOrEmpty(postImageType);
 

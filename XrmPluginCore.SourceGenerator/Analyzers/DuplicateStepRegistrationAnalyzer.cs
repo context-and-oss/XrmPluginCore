@@ -173,6 +173,10 @@ public class DuplicateStepRegistrationAnalyzer : DiagnosticAnalyzer
 					return field.Name;
 				}
 			}
+
+			// An undefined value (e.g. (EventOperation)999): Enum.ToString() returns the integral text,
+			// so use that rather than skipping the registration.
+			return constant.Value?.ToString();
 		}
 
 		return null;

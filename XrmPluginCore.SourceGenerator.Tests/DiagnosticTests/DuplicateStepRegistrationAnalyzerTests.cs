@@ -225,6 +225,38 @@ public class DuplicateStepRegistrationAnalyzerTests
 	}
 
 	[Fact]
+	public async Task Should_Report_For_Duplicate_Undefined_Enum_Cast_Operation()
+	{
+		// An undefined enum value resolves via Enum.ToString() to its integral text ("999"), so two such
+		// registrations are still recognized as duplicates.
+		var source = WrapPlugin("""
+			            RegisterStep<Account, ITestService>((EventOperation)999, ExecutionStage.PostOperation,
+			                nameof(ITestService.HandleA));
+			            RegisterStep<Account, ITestService>((EventOperation)999, ExecutionStage.PostOperation,
+			                nameof(ITestService.HandleB));
+			""");
+
+		var diagnostics = await GetDiagnosticsAsync(source);
+
+		diagnostics.Should().ContainSingle(d => d.Id == "XPC2002");
+	}
+
+	[Fact]
+	public async Task Should_Not_Report_When_Undefined_Enum_Cast_Operations_Differ()
+	{
+		var source = WrapPlugin("""
+			            RegisterStep<Account, ITestService>((EventOperation)998, ExecutionStage.PostOperation,
+			                nameof(ITestService.HandleA));
+			            RegisterStep<Account, ITestService>((EventOperation)999, ExecutionStage.PostOperation,
+			                nameof(ITestService.HandleB));
+			""");
+
+		var diagnostics = await GetDiagnosticsAsync(source);
+
+		diagnostics.Should().NotContain(d => d.Id == "XPC2002");
+	}
+
+	[Fact]
 	public async Task Should_Report_When_Duplicate_Split_Across_Partial_Declarations()
 	{
 		const string source = """

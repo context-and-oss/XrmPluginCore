@@ -134,10 +134,15 @@ public class DuplicateStepRegistrationAnalyzer : DiagnosticAnalyzer
 	}
 
 	/// <summary>
-	/// Resolves an operation/stage argument to its comparison value: an enum member access yields the
-	/// member name (matching <c>EventOperation.Update.ToString()</c>), while a string literal or
-	/// <c>const</c> reference is resolved to its compile-time constant value. Returns null when neither
-	/// applies.
+	/// Resolves an operation/stage argument to its comparison value, matching what the runtime uses
+	/// (<c>value.ToString()</c> for enums, the raw string for custom messages):
+	/// <list type="bullet">
+	/// <item>an enum member access (<c>EventOperation.Update</c>) yields the member name;</item>
+	/// <item>a string literal or <c>const string</c> yields the constant string;</item>
+	/// <item>a <c>const</c> enum reference (<c>const EventOperation Op = EventOperation.Update</c>) is
+	/// mapped from its underlying constant value back to the enum member name.</item>
+	/// </list>
+	/// Returns null when the value can't be resolved to a concrete string.
 	/// </summary>
 	private static string ResolveTupleValue(ExpressionSyntax expression, SemanticModel semanticModel)
 	{
@@ -147,7 +152,31 @@ public class DuplicateStepRegistrationAnalyzer : DiagnosticAnalyzer
 		}
 
 		var constant = semanticModel.GetConstantValue(expression);
-		return constant.HasValue ? constant.Value as string : null;
+		if (!constant.HasValue)
+		{
+			return null;
+		}
+
+		if (constant.Value is string stringValue)
+		{
+			return stringValue;
+		}
+
+		// A const enum reference: GetConstantValue gives the underlying integral value, so map it back to
+		// the member name (matching EventOperation.Update.ToString()).
+		if (semanticModel.GetTypeInfo(expression).Type is INamedTypeSymbol enumType &&
+			enumType.TypeKind == TypeKind.Enum)
+		{
+			foreach (var field in enumType.GetMembers().OfType<IFieldSymbol>())
+			{
+				if (field.HasConstantValue && Equals(field.ConstantValue, constant.Value))
+				{
+					return field.Name;
+				}
+			}
+		}
+
+		return null;
 	}
 
 	private static bool IsPluginClass(INamedTypeSymbol type)

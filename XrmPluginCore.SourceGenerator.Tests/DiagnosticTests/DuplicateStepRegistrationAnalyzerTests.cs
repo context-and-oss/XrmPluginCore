@@ -119,6 +119,39 @@ public class DuplicateStepRegistrationAnalyzerTests
 	}
 
 	[Fact]
+	public async Task Should_Report_For_Duplicate_Const_Enum_Operation()
+	{
+		var source = WrapPlugin("""
+			            const EventOperation Op = EventOperation.Update;
+			            RegisterStep<Account, ITestService>(Op, ExecutionStage.PostOperation,
+			                nameof(ITestService.HandleA));
+			            RegisterStep<Account, ITestService>(Op, ExecutionStage.PostOperation,
+			                nameof(ITestService.HandleB));
+			""");
+
+		var diagnostics = await GetDiagnosticsAsync(source);
+
+		diagnostics.Should().ContainSingle(d => d.Id == "XPC2002");
+	}
+
+	[Fact]
+	public async Task Should_Not_Report_When_Const_Enum_Operations_Differ()
+	{
+		var source = WrapPlugin("""
+			            const EventOperation Create = EventOperation.Create;
+			            const EventOperation Update = EventOperation.Update;
+			            RegisterStep<Account, ITestService>(Create, ExecutionStage.PostOperation,
+			                nameof(ITestService.HandleA));
+			            RegisterStep<Account, ITestService>(Update, ExecutionStage.PostOperation,
+			                nameof(ITestService.HandleB));
+			""");
+
+		var diagnostics = await GetDiagnosticsAsync(source);
+
+		diagnostics.Should().NotContain(d => d.Id == "XPC2002");
+	}
+
+	[Fact]
 	public async Task Should_Report_When_Duplicate_Split_Across_Partial_Declarations()
 	{
 		const string source = """

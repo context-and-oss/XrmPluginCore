@@ -1,7 +1,19 @@
 # Plan: Flatten plugin image generation to eliminate the namespace/aliasing subsystem
 
-> Status: **Approved — implementing.** Ships as a new minor **v1.5.0** that folds in the pending
-> (unreleased) v1.4.2 XPC3007 work; nothing is released before this change.
+> Status: **In progress.** Ships as a new minor **v1.5.0** that folds in the pending (unreleased)
+> v1.4.2 XPC3007 work; nothing is released before this change.
+>
+> Progress:
+> - ✅ PR #1 — XPC2002 duplicate-registration guard (merged, #21).
+> - ✅ PR #2 — generator + runtime rename + code-fix convergence + aliased-usings deletion
+>   (committed `3a0064f` on `flatten-image-generation`). PR #3's code-fix work was folded in here
+>   because it's inseparable from the rename.
+> - ⬜ PR #4 — docs (CLAUDE.md + migration note).
+>
+> Decisions: camel-concat names (no separator); interfaces are a documented escape hatch, not
+> recommended; **migration = documented manual step** — the XPC4002/4003 code fix rewrites handler
+> signatures to the new fully-qualified names, then the developer deletes the now-invalid
+> `using ...PluginRegistrations...;` (surfaces as CS0234). No auto-removal of the stale using.
 
 ## Goal
 

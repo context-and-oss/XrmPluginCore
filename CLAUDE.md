@@ -144,9 +144,9 @@ RegisterStep<Account, AccountService>(
    - Pre/Post image attributes from `WithPreImage()`/`WithPostImage()`/`AddImage()` calls
    - Method reference from the action delegate
 
-3. **Code Generation**: Generates wrapper classes in isolated namespaces:
-   - Namespace: `{Namespace}.PluginRegistrations.{PluginClassName}.{Entity}{Operation}{Stage}`
-   - Classes: `PreImage`, `PostImage`, `ActionWrapper` (simple names, no prefixes)
+3. **Code Generation**: Generates wrapper classes in the **plugin's own namespace**, named after the registration:
+   - Namespace: `{PluginNamespace}` (same namespace as the plugin class)
+   - Classes: `{PluginClass}{Entity}{Operation}{Stage}PreImage` / `...PostImage` / `...ActionWrapper` (the registration-derived prefix is sanitized into a valid identifier). Uniqueness within the namespace is guaranteed by XPC2002 (one registration per entity/operation/stage per plugin) plus distinct plugin class names — so no per-registration namespace or `using` alias is needed.
 
 4. **Signature Validation**: The source generator validates that the handler method signature matches the registered images and emits compile-time diagnostics if there is a mismatch.
 
@@ -156,9 +156,11 @@ RegisterStep<Account, AccountService>(
 
 #### Example Usage
 
-```csharp
-using MyNamespace.PluginRegistrations.AccountPlugin.AccountUpdatePostOperation;
+The generated image types live in the plugin's own namespace, so when the handler is in that same
+namespace no `using` is needed. (When the service lives elsewhere, reference the types by their
+fully-qualified name — the code fix emits that form for you.)
 
+```csharp
 public class AccountPlugin : Plugin
 {
     public AccountPlugin()
@@ -181,8 +183,11 @@ public class AccountPlugin : Plugin
 
 public class AccountService
 {
-    // Handler signature MUST match registered images (enforced by source generator diagnostics)
-    public void HandleUpdate(PreImage preImage, PostImage postImage)
+    // Handler signature MUST match registered images (enforced by source generator diagnostics).
+    // The image types are named after the registration: {PluginClass}{Entity}{Operation}{Stage}{Kind}.
+    public void HandleUpdate(
+        AccountPluginAccountUpdatePostOperationPreImage preImage,
+        AccountPluginAccountUpdatePostOperationPostImage postImage)
     {
         var previousName = preImage.Name;     // Type-safe, IntelliSense works
         var previousRevenue = preImage.Revenue;
@@ -193,15 +198,17 @@ public class AccountService
 
 #### Generated Code Example
 
-The source generator creates wrapper classes in isolated namespaces. Each wrapper holds the strongly-typed entity and implements the shared image interfaces (see [Image Interfaces](#image-interfaces) below):
+The source generator creates wrapper classes in the plugin's own namespace, named after the
+registration. Each wrapper holds the strongly-typed entity and implements the shared image interfaces
+(see [Image Interfaces](#image-interfaces) below):
 
 ```csharp
-// Generated in: {Namespace}.PluginRegistrations.AccountPlugin.AccountUpdatePostOperation
-namespace YourNamespace.PluginRegistrations.AccountPlugin.AccountUpdatePostOperation
+// Generated in the plugin's namespace, named {PluginClass}{Entity}{Operation}{Stage}{Kind}
+namespace YourNamespace
 {
-    public sealed class PreImage : IPluginPreImage<YourNamespace.Account>
+    public sealed class AccountPluginAccountUpdatePostOperationPreImage : IPluginPreImage<YourNamespace.Account>
     {
-        public PreImage(Entity entity)
+        public AccountPluginAccountUpdatePostOperationPreImage(Entity entity)
         {
             Entity = entity.ToEntity<YourNamespace.Account>();
         }
@@ -217,9 +224,9 @@ namespace YourNamespace.PluginRegistrations.AccountPlugin.AccountUpdatePostOpera
         public decimal? Revenue => Entity.Revenue;
     }
 
-    public sealed class PostImage : IPluginPostImage<YourNamespace.Account>
+    public sealed class AccountPluginAccountUpdatePostOperationPostImage : IPluginPostImage<YourNamespace.Account>
     {
-        public PostImage(Entity entity)
+        public AccountPluginAccountUpdatePostOperationPostImage(Entity entity)
         {
             Entity = entity.ToEntity<YourNamespace.Account>();
         }
@@ -250,13 +257,22 @@ Every generated image implements a small interface hierarchy declared in `XrmPlu
 
 The non-generic `IPluginImage` also exposes the members that are always available on any entity image, regardless of which attributes were registered: `Id` (`Guid`, the primary key) and `LogicalName` (`string`).
 
-Because each registration generates its **own** `PreImage`/`PostImage` type in its own namespace, these interfaces let you write shared logic that works across multiple registrations. A handler method may declare its parameters using any of the matching interfaces instead of the concrete generated type — the source generator accepts them and validates the kind (pre vs post) and, for the generic variants, the entity type:
+Each registration generates its **own** concrete `...PreImage`/`...PostImage` type. Prefer those
+concrete types — they expose the strongly-typed, per-attribute properties that are the whole point of
+the feature. The interfaces are an **escape hatch** for the narrow case where you only need the raw
+`Entity` (or genuinely shared, attribute-agnostic logic across registrations); declaring a parameter
+as an interface throws away the generated typed properties. A handler method may declare its
+parameters using any of the matching interfaces instead of the concrete generated type — the source
+generator accepts them and validates the kind (pre vs post) and, for the generic variants, the entity
+type:
 
 ```csharp
 public class AccountService
 {
-    // Concrete generated types (most specific)
-    public void HandleUpdate(PreImage pre, PostImage post) { }
+    // Concrete generated types (preferred — full typed property access)
+    public void HandleUpdate(
+        AccountPluginAccountUpdatePostOperationPreImage pre,
+        AccountPluginAccountUpdatePostOperationPostImage post) { }
 }
 
 public static class AuditHelper
@@ -286,8 +302,8 @@ All three methods are valid and supported. `WithPreImage` and `WithPostImage` ar
 - **IntelliSense support**: Auto-completion for available image attributes
 - **No runtime overhead**: Simple property accessors, no reflection at access time
 - **Null safety**: Missing attributes return null instead of throwing exceptions
-- **Namespace isolation**: Each step gets its own namespace, preventing naming conflicts
-- **Shared interfaces**: `IPluginImage`/`IPluginPreImage`/`IPluginPostImage` (and generic variants) let handler methods share logic across the per-registration concrete image types
+- **No namespace juggling**: types are emitted into the plugin's own namespace with registration-derived names, so there are no `using` aliases to manage
+- **Shared interfaces** (escape hatch): `IPluginImage`/`IPluginPreImage`/`IPluginPostImage` (and generic variants) let handler methods share attribute-agnostic logic across the per-registration concrete image types when you only need the raw `Entity`
 
 ### Type-Safe Custom API Request/Response
 

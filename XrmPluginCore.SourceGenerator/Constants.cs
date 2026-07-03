@@ -12,6 +12,7 @@ internal static class Constants
 
 	// Method names
 	public const string RegisterStepMethodName = "RegisterStep";
+	public const string RegisterPluginStepMethodName = "RegisterPluginStep";
 	public const string WithPreImageMethodName = "WithPreImage";
 	public const string WithPostImageMethodName = "WithPostImage";
 	public const string AddImageMethodName = "AddImage";

@@ -132,6 +132,19 @@ internal static class RegisterStepHelper
 	}
 
 	/// <summary>
+	/// Checks if an invocation is a <c>RegisterStep</c> or legacy <c>RegisterPluginStep</c> call and
+	/// extracts the generic name. Both identify a plugin step whose (entity, operation, stage) tuple
+	/// must be unique within a plugin.
+	/// </summary>
+	public static bool IsStepRegistrationCall(InvocationExpressionSyntax invocation, out GenericNameSyntax genericName)
+	{
+		genericName = GetGenericName(invocation);
+		return genericName != null &&
+			(genericName.Identifier.Text == Constants.RegisterStepMethodName ||
+			 genericName.Identifier.Text == Constants.RegisterPluginStepMethodName);
+	}
+
+	/// <summary>
 	/// Resolves the service type symbol (the second generic argument of a RegisterStep call) from a
 	/// diagnostic location. Returns null if no enclosing RegisterStep call is found or the type cannot
 	/// be resolved.

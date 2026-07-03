@@ -1,4 +1,5 @@
-### v1.4.2 - Unreleased
+### v1.5.0 - Unreleased
+* Add: Error XPC2002: a plugin that registers the same entity/operation/stage combination more than once (via `RegisterStep` or `RegisterPluginStep`) is now reported at compile time. Each combination may be registered at most once per plugin.
 * Add: Info XPC3007: when a Custom API declares `AddRequestParameter`/`AddResponseProperty` but registers with the action-based `RegisterAPI<TService>(name, Action<TService>)` overload, it now suggests the type-safe `RegisterAPI<TService>(name, nameof(...))` overload that generates strongly-typed request/response DTOs. The accompanying code fix converts `s => s.Handle()` to `nameof(TService.Handle)`, and only offers the fix when the lambda calls a method directly on the service parameter (so `s => Other.Handle()` reports the suggestion without a misleading fix).
 * Fix: The `nameof(...)` code fix (XPC3001 and XPC3007) now produces valid syntax when the service type is written with a namespace or generic arguments (e.g. `RegisterAPI<My.Namespace.Service>`), instead of emitting a malformed single identifier.
 

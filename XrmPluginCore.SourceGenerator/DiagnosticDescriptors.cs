@@ -33,6 +33,17 @@ public static class DiagnosticDescriptors
 		isEnabledByDefault: true,
 		helpLinkUri: $"{HelpLinkBaseUri}/XPC2001.md");
 
+	public static readonly DiagnosticDescriptor DuplicateStepRegistration = new(
+		id: "XPC2002",
+		title: "Duplicate plugin step registration",
+		messageFormat: "Plugin '{0}' registers {1}/{2}/{3} more than once. Each entity/operation/stage combination may be registered at most once per plugin.",
+		category: Category,
+		defaultSeverity: DiagnosticSeverity.Error,
+		isEnabledByDefault: true,
+		description: "A plugin may register a given entity/operation/stage combination only once; the platform keys steps by that combination. A duplicate is rejected at registration time and would also make the source-generated image/wrapper type names ambiguous.",
+		helpLinkUri: $"{HelpLinkBaseUri}/XPC2002.md",
+		customTags: WellKnownDiagnosticTags.CompilationEnd);
+
 	public static readonly DiagnosticDescriptor PreferNameofOverStringLiteral = new(
 		id: "XPC3001",
 		title: "Prefer nameof over string literal for handler method",

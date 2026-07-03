@@ -39,7 +39,6 @@ using XrmPluginCore.Abstractions;
 using XrmPluginCore.Enums;
 using Microsoft.Extensions.DependencyInjection;
 using TestNamespace;
-using TestNamespace.PluginRegistrations.TestPlugin.{entityClass}UpdatePostOperation;
 
 namespace TestNamespace
 {{
@@ -61,12 +60,12 @@ namespace TestNamespace
 
     public interface ITestService
     {{
-        void HandleAccountUpdate(PreImage preImage);
+        void HandleAccountUpdate(TestPlugin{entityClass}UpdatePostOperationPreImage preImage);
     }}
 
     public class TestService : ITestService
     {{
-        public void HandleAccountUpdate(PreImage preImage) {{ }}
+        public void HandleAccountUpdate(TestPlugin{entityClass}UpdatePostOperationPreImage preImage) {{ }}
     }}
 }}";
 	}
@@ -81,7 +80,6 @@ namespace TestNamespace
 		using XrmPluginCore.Enums;
 		using Microsoft.Extensions.DependencyInjection;
 		using TestNamespace;
-		using TestNamespace.PluginRegistrations.TestPlugin.AccountUpdatePostOperation;
 
 		namespace TestNamespace
 		{
@@ -103,12 +101,12 @@ namespace TestNamespace
 
 		    public interface ITestService
 		    {
-		        void HandleAccountUpdate(PostImage postImage);
+		        void HandleAccountUpdate(TestPluginAccountUpdatePostOperationPostImage postImage);
 		    }
 
 		    public class TestService : ITestService
 		    {
-		        public void HandleAccountUpdate(PostImage postImage) { }
+		        public void HandleAccountUpdate(TestPluginAccountUpdatePostOperationPostImage postImage) { }
 		    }
 		}
 		""";
@@ -123,7 +121,6 @@ namespace TestNamespace
 		using XrmPluginCore.Enums;
 		using Microsoft.Extensions.DependencyInjection;
 		using TestNamespace;
-		using TestNamespace.PluginRegistrations.TestPlugin.AccountUpdatePostOperation;
 
 		namespace TestNamespace
 		{
@@ -146,12 +143,12 @@ namespace TestNamespace
 
 		    public interface ITestService
 		    {
-		        void HandleAccountUpdate(PreImage preImage, PostImage postImage);
+		        void HandleAccountUpdate(TestPluginAccountUpdatePostOperationPreImage preImage, TestPluginAccountUpdatePostOperationPostImage postImage);
 		    }
 
 		    public class TestService : ITestService
 		    {
-		        public void HandleAccountUpdate(PreImage preImage, PostImage postImage) { }
+		        public void HandleAccountUpdate(TestPluginAccountUpdatePostOperationPreImage preImage, TestPluginAccountUpdatePostOperationPostImage postImage) { }
 		    }
 		}
 		""";
@@ -167,7 +164,6 @@ namespace TestNamespace
 				using XrmPluginCore.Enums;
 				using Microsoft.Extensions.DependencyInjection;
 				using TestNamespace;
-				using TestNamespace.PluginRegistrations.TestPlugin.AccountUpdatePostOperation;
 
 				namespace TestNamespace
 				{
@@ -208,7 +204,6 @@ namespace TestNamespace
 		using XrmPluginCore.Enums;
 		using Microsoft.Extensions.DependencyInjection;
 		using TestNamespace;
-		using TestNamespace.PluginRegistrations.TestPlugin.AccountUpdatePostOperation;
 
 		namespace TestNamespace
 		{
@@ -230,12 +225,12 @@ namespace TestNamespace
 
 		    public interface ITestService
 		    {
-		        void HandleAccountUpdate(PreImage preImage);
+		        void HandleAccountUpdate(TestPluginAccountUpdatePostOperationPreImage preImage);
 		    }
 
 		    public class TestService : ITestService
 		    {
-		        public void HandleAccountUpdate(PreImage preImage) { }
+		        public void HandleAccountUpdate(TestPluginAccountUpdatePostOperationPreImage preImage) { }
 		    }
 		}
 		""";
@@ -250,7 +245,6 @@ namespace TestNamespace
 		using XrmPluginCore.Enums;
 		using Microsoft.Extensions.DependencyInjection;
 		using TestNamespace;
-		using TestNamespace.PluginRegistrations.TestPlugin.AccountUpdatePostOperation;
 
 		namespace TestNamespace
 		{
@@ -272,12 +266,12 @@ namespace TestNamespace
 
 		    public interface ITestService
 		    {
-		        void HandleAccountUpdate(PostImage postImage);
+		        void HandleAccountUpdate(TestPluginAccountUpdatePostOperationPostImage postImage);
 		    }
 
 		    public class TestService : ITestService
 		    {
-		        public void HandleAccountUpdate(PostImage postImage) { }
+		        public void HandleAccountUpdate(TestPluginAccountUpdatePostOperationPostImage postImage) { }
 		    }
 		}
 		""";
@@ -294,7 +288,6 @@ namespace TestNamespace
 		using XrmPluginCore.Enums;
 		using Microsoft.Extensions.DependencyInjection;
 		using TestNamespace;
-		using TestNamespace.PluginRegistrations.TestPlugin.AccountUpdatePostOperation;
 
 		namespace TestNamespace
 		{
@@ -316,12 +309,12 @@ namespace TestNamespace
 
 		    public interface ITestService
 		    {
-		        void HandleAccountUpdate(PreImage preImage);
+		        void HandleAccountUpdate(TestPluginAccountUpdatePostOperationPreImage preImage);
 		    }
 
 		    public class TestService : ITestService
 		    {
-		        public void HandleAccountUpdate(PreImage preImage)
+		        public void HandleAccountUpdate(TestPluginAccountUpdatePostOperationPreImage preImage)
 		        {
 		            // Only touches a non-deprecated member.
 		            var name = preImage.Name;
@@ -341,7 +334,6 @@ namespace TestNamespace
 		using XrmPluginCore.Enums;
 		using Microsoft.Extensions.DependencyInjection;
 		using TestNamespace;
-		using TestNamespace.PluginRegistrations.TestPlugin.AccountUpdatePostOperation;
 
 		namespace TestNamespace
 		{
@@ -363,12 +355,12 @@ namespace TestNamespace
 
 		    public interface ITestService
 		    {
-		        void HandleAccountUpdate(PreImage preImage);
+		        void HandleAccountUpdate(TestPluginAccountUpdatePostOperationPreImage preImage);
 		    }
 
 		    public class TestService : ITestService
 		    {
-		        public void HandleAccountUpdate(PreImage preImage)
+		        public void HandleAccountUpdate(TestPluginAccountUpdatePostOperationPreImage preImage)
 		        {
 		            // Accessing the deprecated member here SHOULD raise CS0612 in this calling code.
 		            var legacy = preImage.ctx_DeprecatedField;
@@ -479,9 +471,6 @@ namespace TestNamespace
 	/// </summary>
 	public static string GetCompleteSource(string pluginSource)
 	{
-		var entityName = pluginSource.Contains("RegisterStep<Account") ? "Account" : "Contact";
-		var operation = pluginSource.Contains("EventOperation.Delete") ? "Delete" : "Update";
-
 		return $$"""
 			using System;
 			using System.ComponentModel;
@@ -490,7 +479,6 @@ namespace TestNamespace
 			using XrmPluginCore.Enums;
 			using Microsoft.Extensions.DependencyInjection;
 			using XrmPluginCore.Tests.Context.BusinessDomain;
-			using TestNamespace.PluginRegistrations.TestPlugin.{{entityName}}{{operation}}PostOperation;
 
 			namespace TestNamespace
 			{

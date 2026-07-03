@@ -1,12 +1,10 @@
 using System;
 
-// Import the generated PreImage from the namespace
-using XrmPluginCore.Tests.TestPlugins.TypeSafe.PluginRegistrations.TypeSafeContactPlugin.ContactCreatePostOperation;
-
 namespace XrmPluginCore.Tests.TestPlugins.TypeSafe;
 
 /// <summary>
-/// Service for TypeSafeContactPlugin that receives PreImage directly
+/// Service for TypeSafeContactPlugin that receives PreImage directly. The image wrapper type is
+/// generated into this namespace, named after the registration.
 /// </summary>
 public class TypeSafeContactService
 {
@@ -17,7 +15,7 @@ public class TypeSafeContactService
 		this.plugin = plugin ?? throw new ArgumentNullException(nameof(plugin));
 	}
 
-	public void HandleCreate(PreImage preImage)
+	public void HandleCreate(TypeSafeContactPluginContactCreatePostOperationPreImage preImage)
 	{
 		if (preImage != null)
 		{

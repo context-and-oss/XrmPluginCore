@@ -1,6 +1,7 @@
 using Microsoft.CodeAnalysis;
 using System.Collections.Generic;
 using System.Linq;
+using XrmPluginCore.SourceGenerator.Helpers;
 
 namespace XrmPluginCore.SourceGenerator.Models;
 
@@ -46,11 +47,19 @@ internal sealed class PluginStepMetadata
 	public List<DiagnosticInfo> Diagnostics { get; set; } = [];
 
 	/// <summary>
-	/// Gets the namespace for generated wrapper classes.
-	/// Format: {OriginalNamespace}.PluginRegistrations.{PluginClassName}.{Entity}{Op}{Stage}
+	/// The identifier prefix shared by every generated type for this registration, derived from the
+	/// registration tuple and sanitized into a valid identifier. Uniqueness within the plugin namespace
+	/// is guaranteed by XPC2002 (one registration per entity/operation/stage per plugin) and by distinct
+	/// plugin class names. Kept in sync with the runtime discovery in <c>Plugin.RegisterStep</c>.
 	/// </summary>
-	public string RegistrationNamespace =>
-		$"{Namespace}.PluginRegistrations.{PluginClassName}.{EntityTypeName}{EventOperation}{ExecutionStage}";
+	public string TypePrefix =>
+		IdentifierHelper.Sanitize($"{PluginClassName}{EntityTypeName}{EventOperation}{ExecutionStage}");
+
+	/// <summary>The generated wrapper class name for the given image type (e.g. "...PreImage").</summary>
+	public string ImageClassName(string imageType) => $"{TypePrefix}{imageType}";
+
+	/// <summary>The generated ActionWrapper class name for this registration.</summary>
+	public string ActionWrapperClassName => $"{TypePrefix}{Constants.ActionWrapperClassSuffix}";
 
 	/// <summary>
 	/// Gets a unique identifier for this registration.
@@ -176,12 +185,6 @@ internal sealed class ImageMetadata
 	public string ImageType { get; set; } // "PreImage" or "PostImage"
 	public string ImageName { get; set; }
 	public List<AttributeMetadata> Attributes { get; set; } = [];
-
-	/// <summary>
-	/// Gets the generated wrapper class name for this image.
-	/// Simply "PreImage" or "PostImage" - namespace provides isolation.
-	/// </summary>
-	public string WrapperClassName => ImageType;
 
 	public override bool Equals(object obj)
 	{

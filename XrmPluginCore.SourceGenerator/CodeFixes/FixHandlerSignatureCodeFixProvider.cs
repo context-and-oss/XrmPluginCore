@@ -14,7 +14,8 @@ using XrmPluginCore.SourceGenerator.Helpers;
 namespace XrmPluginCore.SourceGenerator.CodeFixes;
 
 /// <summary>
-/// Code fix provider that fixes handler method signatures to match registered images.
+/// Code fix provider that fixes handler method signatures to match registered images. Image parameters
+/// are emitted with their fully-qualified generated wrapper type names, so no using directive is needed.
 /// </summary>
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(FixHandlerSignatureCodeFixProvider)), Shared]
 public class FixHandlerSignatureCodeFixProvider : CodeFixProvider
@@ -25,7 +26,7 @@ public class FixHandlerSignatureCodeFixProvider : CodeFixProvider
 			DiagnosticDescriptors.HandlerSignatureMismatchError.Id);
 
 	public sealed override FixAllProvider GetFixAllProvider() =>
-		AliasedImageUsingsFixAllProvider.Instance;
+		WellKnownFixAllProviders.BatchFixer;
 
 	public sealed override async Task RegisterCodeFixesAsync(CodeFixContext context)
 	{
@@ -44,12 +45,11 @@ public class FixHandlerSignatureCodeFixProvider : CodeFixProvider
 			return;
 		}
 
-		diagnostic.Properties.TryGetValue(Constants.PropertyHasPreImage, out var hasPreImageStr);
-		diagnostic.Properties.TryGetValue(Constants.PropertyHasPostImage, out var hasPostImageStr);
-		diagnostic.Properties.TryGetValue(Constants.PropertyImageNamespace, out var imageNamespace);
+		diagnostic.Properties.TryGetValue(Constants.PropertyPreImageType, out var preImageType);
+		diagnostic.Properties.TryGetValue(Constants.PropertyPostImageType, out var postImageType);
 
-		var hasPreImage = bool.TryParse(hasPreImageStr, out var pre) && pre;
-		var hasPostImage = bool.TryParse(hasPostImageStr, out var post) && post;
+		var hasPreImage = !string.IsNullOrEmpty(preImageType);
+		var hasPostImage = !string.IsNullOrEmpty(postImageType);
 
 		// Build the title showing expected signature
 		var signatureDescription = SyntaxFactoryHelper.BuildSignatureDescription(hasPreImage, hasPostImage, includeParameterNames: true);
@@ -58,7 +58,7 @@ public class FixHandlerSignatureCodeFixProvider : CodeFixProvider
 		context.RegisterCodeFix(
 			CodeAction.Create(
 				title: title,
-				createChangedSolution: c => FixSignatureAsync(context.Document, diagnostic, serviceType!, methodName!, hasPreImage, hasPostImage, imageNamespace, c),
+				createChangedSolution: c => FixSignatureAsync(context.Document, diagnostic, methodName!, preImageType, postImageType, c),
 				equivalenceKey: nameof(FixHandlerSignatureCodeFixProvider)),
 			diagnostic);
 	}
@@ -66,23 +66,19 @@ public class FixHandlerSignatureCodeFixProvider : CodeFixProvider
 	private static async Task<Solution> FixSignatureAsync(
 		Document document,
 		Diagnostic diagnostic,
-		string serviceTypeName,
 		string methodName,
-		bool hasPreImage,
-		bool hasPostImage,
-		string imageNamespace,
+		string preImageType,
+		string postImageType,
 		CancellationToken cancellationToken)
 	{
 		var solution = document.Project.Solution;
 
-		// Get semantic model to find the service type
 		var semanticModel = await document.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
 		if (semanticModel == null)
 		{
 			return solution;
 		}
 
-		// Find the RegisterStep call to get the service type symbol
 		var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
 		if (root == null)
 		{
@@ -99,7 +95,6 @@ public class FixHandlerSignatureCodeFixProvider : CodeFixProvider
 			return solution;
 		}
 
-		// Get service type from generic arguments
 		var genericName = RegisterStepHelper.GetGenericName(registerStepInvocation);
 		if (genericName == null || genericName.TypeArgumentList.Arguments.Count < 2)
 		{
@@ -108,17 +103,12 @@ public class FixHandlerSignatureCodeFixProvider : CodeFixProvider
 
 		var serviceTypeSyntax = genericName.TypeArgumentList.Arguments[1];
 		var typeInfo = semanticModel.GetTypeInfo(serviceTypeSyntax, cancellationToken);
-		var serviceTypeSymbol = typeInfo.Type as INamedTypeSymbol;
-
-		if (serviceTypeSymbol == null)
+		if (typeInfo.Type is not INamedTypeSymbol serviceTypeSymbol)
 		{
 			return solution;
 		}
 
-		// Find the method declarations to fix (in interface and implementations)
-		solution = await FixMethodDeclarationsAsync(solution, semanticModel.Compilation, serviceTypeSymbol, methodName, hasPreImage, hasPostImage, imageNamespace, cancellationToken);
-
-		return solution;
+		return await FixMethodDeclarationsAsync(solution, semanticModel.Compilation, serviceTypeSymbol, methodName, preImageType, postImageType, cancellationToken);
 	}
 
 	private static async Task<Solution> FixMethodDeclarationsAsync(
@@ -126,9 +116,8 @@ public class FixHandlerSignatureCodeFixProvider : CodeFixProvider
 		Compilation compilation,
 		INamedTypeSymbol serviceType,
 		string methodName,
-		bool hasPreImage,
-		bool hasPostImage,
-		string imageNamespace,
+		string preImageType,
+		string postImageType,
 		CancellationToken cancellationToken)
 	{
 		// Collect ALL methods to fix (interface + implementations)
@@ -136,8 +125,7 @@ public class FixHandlerSignatureCodeFixProvider : CodeFixProvider
 
 		if (serviceType.TypeKind == TypeKind.Interface)
 		{
-			var implMethods = TypeHelper.FindImplementingMethods(compilation, serviceType, methodName);
-			allMethods.AddRange(implMethods);
+			allMethods.AddRange(TypeHelper.FindImplementingMethods(compilation, serviceType, methodName));
 		}
 
 		// Group method locations by document (syntax tree)
@@ -161,11 +149,11 @@ public class FixHandlerSignatureCodeFixProvider : CodeFixProvider
 			}
 		}
 
-		// Process each document
+		var newParameters = SyntaxFactoryHelper.CreateImageParameterList(preImageType, postImageType);
+
 		foreach (var kvp in locationsByTree)
 		{
 			var tree = kvp.Key;
-			var locations = kvp.Value;
 
 			var methodDocument = solution.GetDocument(tree);
 			if (methodDocument == null)
@@ -175,12 +163,12 @@ public class FixHandlerSignatureCodeFixProvider : CodeFixProvider
 
 			var methodRoot = await tree.GetRootAsync(cancellationToken).ConfigureAwait(false);
 
-			// Find all method declarations in this document
+			// Find all target method declarations in this document
 			var methodDeclarations = new List<MethodDeclarationSyntax>();
-			foreach (var location in locations)
+			foreach (var location in kvp.Value)
 			{
-				var node = methodRoot.FindNode(location.SourceSpan);
-				var methodDecl = node.AncestorsAndSelf()
+				var methodDecl = methodRoot.FindNode(location.SourceSpan)
+					.AncestorsAndSelf()
 					.OfType<MethodDeclarationSyntax>()
 					.FirstOrDefault();
 
@@ -195,42 +183,9 @@ public class FixHandlerSignatureCodeFixProvider : CodeFixProvider
 				continue;
 			}
 
-			// Always qualify the image parameters with the namespace alias.
-			var alias = string.IsNullOrEmpty(imageNamespace)
-				? null
-				: SyntaxFactoryHelper.GetAliasForImageNamespace(imageNamespace);
-			var newParameters = SyntaxFactoryHelper.CreateImageParameterList(hasPreImage, hasPostImage, alias);
-
-			// Build a set of (containingTypeName, methodName) pairs to replace
-			var targets = new HashSet<(string typeName, string method)>();
-			foreach (var methodDecl in methodDeclarations)
-			{
-				var containingType = methodDecl.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault();
-				var typeName = containingType?.Identifier.Text;
-				if (typeName != null)
-				{
-					targets.Add((typeName, methodDecl.Identifier.Text));
-				}
-			}
-
-			// Emit the aliased using and requalify existing image references FIRST, on the original
-			// tree, so the rewriter resolves bare references against a semantic model whose nodes still
-			// match. The replacement parameters below are already alias-qualified, so the requalifier
-			// leaves them untouched.
-			var treeSemanticModel = compilation.GetSemanticModel(tree);
-			var newRoot = SyntaxFactoryHelper.ApplyAliasedImageUsings(methodRoot, imageNamespace, treeSemanticModel);
-
-			// Replace all matching method declarations one at a time, re-finding after each
-			foreach (var target in targets)
-			{
-				var current = newRoot.DescendantNodes().OfType<MethodDeclarationSyntax>()
-					.FirstOrDefault(m => m.Identifier.Text == target.method &&
-						m.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault()?.Identifier.Text == target.typeName);
-				if (current != null)
-				{
-					newRoot = newRoot.ReplaceNode(current, current.WithParameterList(newParameters));
-				}
-			}
+			var newRoot = methodRoot.ReplaceNodes(
+				methodDeclarations,
+				(original, _) => original.WithParameterList(newParameters));
 
 			solution = solution.WithDocumentSyntaxRoot(methodDocument.Id, newRoot);
 		}

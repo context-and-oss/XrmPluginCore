@@ -13,13 +13,17 @@ namespace XrmPluginCore.SourceGenerator.Helpers;
 internal static class RegisterStepHelper
 {
 	/// <summary>
-	/// Computes the expected generated wrapper namespace for a RegisterStep invocation.
-	/// Returns: {PluginNamespace}.PluginRegistrations.{PluginClassName}.{EntityTypeName}{Operation}{Stage}
+	/// Computes the fully-qualified name of a generated image wrapper type for a RegisterStep invocation,
+	/// e.g. <c>{PluginNamespace}.{Sanitize(PluginClass+Entity+Operation+Stage)}{imageTypeSuffix}</c> where
+	/// <paramref name="imageTypeSuffix"/> is "PreImage" or "PostImage". Must stay in sync with the
+	/// generator (<see cref="Models.PluginStepMetadata"/>) and the runtime discovery in
+	/// <c>Plugin.RegisterStep</c>. Returns null when the registration tuple can't be resolved.
 	/// </summary>
-	public static string GetExpectedImageNamespace(
+	public static string GetExpectedImageTypeName(
 		InvocationExpressionSyntax invocation,
 		GenericNameSyntax genericName,
-		SemanticModel semanticModel)
+		SemanticModel semanticModel,
+		string imageTypeSuffix)
 	{
 		var pluginClass = invocation.Ancestors().OfType<ClassDeclarationSyntax>().FirstOrDefault();
 		if (pluginClass == null)
@@ -27,11 +31,9 @@ internal static class RegisterStepHelper
 			return null;
 		}
 
-		var pluginClassName = pluginClass.Identifier.Text;
 		var pluginNamespace = GetNamespace(pluginClass);
 
-		var entityTypeSyntax = genericName.TypeArgumentList.Arguments[0];
-		var entityTypeInfo = semanticModel.GetTypeInfo(entityTypeSyntax);
+		var entityTypeInfo = semanticModel.GetTypeInfo(genericName.TypeArgumentList.Arguments[0]);
 		var entityTypeName = entityTypeInfo.Type?.Name ?? "Unknown";
 
 		var (operationExpr, stageExpr) = GetOperationAndStageArguments(invocation, semanticModel);
@@ -43,7 +45,9 @@ internal static class RegisterStepHelper
 		var operation = ExtractEnumValue(operationExpr);
 		var stage = ExtractEnumValue(stageExpr);
 
-		return $"{pluginNamespace}.PluginRegistrations.{pluginClassName}.{entityTypeName}{operation}{stage}";
+		var prefix = IdentifierHelper.Sanitize($"{pluginClass.Identifier.Text}{entityTypeName}{operation}{stage}");
+		var ns = string.IsNullOrEmpty(pluginNamespace) ? string.Empty : pluginNamespace + ".";
+		return $"{ns}{prefix}{imageTypeSuffix}";
 	}
 
 	/// <summary>

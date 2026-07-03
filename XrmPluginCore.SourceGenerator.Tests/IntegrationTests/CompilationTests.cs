@@ -48,7 +48,7 @@ public class CompilationTests
 		// Act
 		using var loadedAssembly = GeneratorTestHelper.LoadAssembly(result.AssemblyBytes!);
 		var preImageType = loadedAssembly.Assembly.GetType(
-			"TestNamespace.PluginRegistrations.TestPlugin.AccountUpdatePostOperation.PreImage");
+			"TestNamespace.TestPluginAccountUpdatePostOperationPreImage");
 
 		preImageType.Should().NotBeNull("PreImage class should be generated");
 
@@ -99,7 +99,7 @@ public class CompilationTests
 		// Act
 		using var loadedAssembly = GeneratorTestHelper.LoadAssembly(result.AssemblyBytes!);
 		var postImageType = loadedAssembly.Assembly.GetType(
-			"TestNamespace.PluginRegistrations.TestPlugin.AccountUpdatePostOperation.PostImage");
+			"TestNamespace.TestPluginAccountUpdatePostOperationPostImage");
 
 		var postImageInstance = Activator.CreateInstance(postImageType!, entity);
 
@@ -135,10 +135,10 @@ public class CompilationTests
 
 		// Act
 		using var loadedAssembly = GeneratorTestHelper.LoadAssembly(result.AssemblyBytes!);
-		const string baseNamespace = "TestNamespace.PluginRegistrations.TestPlugin.AccountUpdatePostOperation";
+		const string baseNamespace = "TestNamespace";
 
-		var preImageType = loadedAssembly.Assembly.GetType($"{baseNamespace}.PreImage");
-		var postImageType = loadedAssembly.Assembly.GetType($"{baseNamespace}.PostImage");
+		var preImageType = loadedAssembly.Assembly.GetType($"{baseNamespace}.TestPluginAccountUpdatePostOperationPreImage");
+		var postImageType = loadedAssembly.Assembly.GetType($"{baseNamespace}.TestPluginAccountUpdatePostOperationPostImage");
 
 		var preImageInstance = Activator.CreateInstance(preImageType!, preEntity);
 		var postImageInstance = Activator.CreateInstance(postImageType!, postEntity);
@@ -169,7 +169,7 @@ public class CompilationTests
 		// Act
 		using var loadedAssembly = GeneratorTestHelper.LoadAssembly(result.AssemblyBytes!);
 		var preImageType = loadedAssembly.Assembly.GetType(
-			"TestNamespace.PluginRegistrations.TestPlugin.AccountUpdatePostOperation.PreImage");
+			"TestNamespace.TestPluginAccountUpdatePostOperationPreImage");
 
 		var preImageInstance = Activator.CreateInstance(preImageType!, entity);
 
@@ -184,7 +184,7 @@ public class CompilationTests
 	}
 
 	[Fact]
-	public void Should_Verify_Namespace_Isolation_Per_Registration()
+	public void Should_Generate_Types_In_Plugin_Namespace()
 	{
 		// Arrange
 		var source = TestFixtures.GetCompleteSource(
@@ -196,9 +196,9 @@ public class CompilationTests
 		// Act
 		using var loadedAssembly = GeneratorTestHelper.LoadAssembly(result.AssemblyBytes!);
 
-		// Assert - namespace should follow pattern: {Namespace}.PluginRegistrations.{Plugin}.{Entity}{Operation}{Stage}
-		const string expectedNamespace = "TestNamespace.PluginRegistrations.TestPlugin.AccountUpdatePostOperation";
-		var preImageType = loadedAssembly.Assembly.GetType($"{expectedNamespace}.PreImage");
+		// Assert - generated types live in the plugin's own namespace (registration-derived type names)
+		const string expectedNamespace = "TestNamespace";
+		var preImageType = loadedAssembly.Assembly.GetType($"{expectedNamespace}.TestPluginAccountUpdatePostOperationPreImage");
 
 		preImageType.Should().NotBeNull("PreImage should be in the expected namespace");
 		preImageType!.Namespace.Should().Be(expectedNamespace);
@@ -216,8 +216,8 @@ public class CompilationTests
 
 		// Act
 		using var loadedAssembly = GeneratorTestHelper.LoadAssembly(result.AssemblyBytes!);
-		const string expectedNamespace = "TestNamespace.PluginRegistrations.TestPlugin.AccountUpdatePostOperation";
-		var actionWrapperType = loadedAssembly.Assembly.GetType($"{expectedNamespace}.ActionWrapper");
+		const string expectedNamespace = "TestNamespace";
+		var actionWrapperType = loadedAssembly.Assembly.GetType($"{expectedNamespace}.TestPluginAccountUpdatePostOperationActionWrapper");
 
 		// Assert
 		actionWrapperType.Should().NotBeNull("ActionWrapper should be generated");

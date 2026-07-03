@@ -152,6 +152,79 @@ public class DuplicateStepRegistrationAnalyzerTests
 	}
 
 	[Fact]
+	public async Task Should_Report_When_Different_Const_Members_Share_Message_Value()
+	{
+		// Two distinct const string members with the same value, referenced via member access. The
+		// runtime/wrapper naming keys off the string value, so these are duplicates even though the
+		// member identifiers differ.
+		const string source = """
+			using System;
+			using Microsoft.Xrm.Sdk;
+			using XrmPluginCore;
+			using XrmPluginCore.Enums;
+			using Microsoft.Extensions.DependencyInjection;
+			using XrmPluginCore.Tests.Context.BusinessDomain;
+
+			namespace TestNamespace
+			{
+			    public static class Msgs
+			    {
+			        public const string A = "custom_DoThing";
+			        public const string B = "custom_DoThing";
+			    }
+
+			    public class TestPlugin : Plugin
+			    {
+			        public TestPlugin()
+			        {
+			            RegisterStep<Account>(Msgs.A, ExecutionStage.PostOperation, s => { });
+			            RegisterStep<Account>(Msgs.B, ExecutionStage.PostOperation, s => { });
+			        }
+			    }
+			}
+			""";
+
+		var diagnostics = await GetDiagnosticsAsync(source);
+
+		diagnostics.Should().ContainSingle(d => d.Id == "XPC2002");
+	}
+
+	[Fact]
+	public async Task Should_Not_Report_When_Const_Members_Have_Different_Message_Values()
+	{
+		const string source = """
+			using System;
+			using Microsoft.Xrm.Sdk;
+			using XrmPluginCore;
+			using XrmPluginCore.Enums;
+			using Microsoft.Extensions.DependencyInjection;
+			using XrmPluginCore.Tests.Context.BusinessDomain;
+
+			namespace TestNamespace
+			{
+			    public static class Msgs
+			    {
+			        public const string A = "custom_DoThingA";
+			        public const string B = "custom_DoThingB";
+			    }
+
+			    public class TestPlugin : Plugin
+			    {
+			        public TestPlugin()
+			        {
+			            RegisterStep<Account>(Msgs.A, ExecutionStage.PostOperation, s => { });
+			            RegisterStep<Account>(Msgs.B, ExecutionStage.PostOperation, s => { });
+			        }
+			    }
+			}
+			""";
+
+		var diagnostics = await GetDiagnosticsAsync(source);
+
+		diagnostics.Should().NotContain(d => d.Id == "XPC2002");
+	}
+
+	[Fact]
 	public async Task Should_Report_When_Duplicate_Split_Across_Partial_Declarations()
 	{
 		const string source = """

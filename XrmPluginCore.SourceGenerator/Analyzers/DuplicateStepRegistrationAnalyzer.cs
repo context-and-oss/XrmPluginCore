@@ -134,36 +134,35 @@ public class DuplicateStepRegistrationAnalyzer : DiagnosticAnalyzer
 	}
 
 	/// <summary>
-	/// Resolves an operation/stage argument to its comparison value, matching what the runtime uses
-	/// (<c>value.ToString()</c> for enums, the raw string for custom messages):
+	/// Resolves an operation/stage argument to its comparison value, matching what the runtime and
+	/// generated wrappers use (the string value for custom messages, <c>value.ToString()</c> for enums).
+	/// Constant evaluation drives this so it works uniformly for literals, <c>const</c> locals/fields,
+	/// and member-access references (<c>EventOperation.Update</c>, <c>MyMessages.DoThing</c>):
 	/// <list type="bullet">
-	/// <item>an enum member access (<c>EventOperation.Update</c>) yields the member name;</item>
-	/// <item>a string literal or <c>const string</c> yields the constant string;</item>
-	/// <item>a <c>const</c> enum reference (<c>const EventOperation Op = EventOperation.Update</c>) is
-	/// mapped from its underlying constant value back to the enum member name.</item>
+	/// <item>a constant string (literal, <c>const string</c>, or a <c>const string</c> member) yields
+	/// that string value — so two members sharing a value compare equal;</item>
+	/// <item>an enum constant (member access or a <c>const</c> enum) is mapped from its underlying
+	/// integral value back to the enum member name.</item>
 	/// </list>
 	/// Returns null when the value can't be resolved to a concrete string.
 	/// </summary>
 	private static string ResolveTupleValue(ExpressionSyntax expression, SemanticModel semanticModel)
 	{
-		if (expression is MemberAccessExpressionSyntax memberAccess)
-		{
-			return memberAccess.Name.Identifier.Text;
-		}
-
 		var constant = semanticModel.GetConstantValue(expression);
 		if (!constant.HasValue)
 		{
 			return null;
 		}
 
+		// Custom message name: the runtime and generated wrapper naming key off the string value, not the
+		// member identifier, so a const string member (MyMessages.DoThing) resolves to its value.
 		if (constant.Value is string stringValue)
 		{
 			return stringValue;
 		}
 
-		// A const enum reference: GetConstantValue gives the underlying integral value, so map it back to
-		// the member name (matching EventOperation.Update.ToString()).
+		// Enum value: GetConstantValue gives the underlying integral value, so map it back to the member
+		// name to match EventOperation.Update.ToString().
 		if (semanticModel.GetTypeInfo(expression).Type is INamedTypeSymbol enumType &&
 			enumType.TypeKind == TypeKind.Enum)
 		{

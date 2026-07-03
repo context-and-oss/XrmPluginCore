@@ -232,6 +232,65 @@ public class CustomApiHandlerDiagnosticsTests : CodeFixTestBase
 	}
 
 	[Fact]
+	public async Task Should_Report_XPC3007_Without_MethodName_When_Call_Is_Not_On_Lambda_Parameter()
+	{
+		// The lambda calls a method on a different receiver, not the service parameter, so no
+		// nameof(CallbackService.X) can be safely suggested: report the diagnostic but offer no fix.
+		const string source = """
+			using XrmPluginCore;
+			using XrmPluginCore.Enums;
+			using Microsoft.Extensions.DependencyInjection;
+
+			namespace TestNamespace
+			{
+			    public static class Other { public static void Handle() { } }
+
+			    public class SomeApi : Plugin
+			    {
+			        public SomeApi()
+			        {
+			            RegisterAPI<CallbackService>(nameof(SomeApi), s => Other.Handle())
+			                .AddResponseProperty("StatusCode", CustomApiParameterType.Integer);
+			        }
+
+			        protected override IServiceCollection OnBeforeBuildServiceProvider(IServiceCollection services)
+			            => services.AddScoped<CallbackService>();
+			    }
+
+			    public class CallbackService
+			    {
+			        public void Handle() { }
+			    }
+			}
+			""";
+
+		var diagnostics = await GetDiagnosticsAsync(source, new PreferTypedCustomApiHandlerAnalyzer());
+
+		var diagnostic = diagnostics.Should().ContainSingle(d => d.Id == "XPC3007").Subject;
+		diagnostic.Properties.ContainsKey("MethodName").Should().BeFalse();
+	}
+
+	[Fact]
+	public async Task Should_Fix_Action_Overload_With_Qualified_Service_Type()
+	{
+		// A namespace-qualified generic argument must produce valid nameof syntax (not a single
+		// malformed identifier).
+		const string registration = """
+			            RegisterAPI<TestNamespace.CallbackService>(nameof(SomeApi), s => s.Handle())
+			                .AddResponseProperty("StatusCode", CustomApiParameterType.Integer);
+			""";
+		var source = WrapPlugin(registration, serviceBody: "public void Handle() { }");
+
+		var fixedSource = await ApplyCodeFixAsync(
+			source,
+			new PreferTypedCustomApiHandlerAnalyzer(),
+			new PreferTypedCustomApiHandlerCodeFixProvider(),
+			DiagnosticDescriptors.PreferTypedCustomApiHandler.Id);
+
+		fixedSource.Should().Contain("nameof(TestNamespace.CallbackService.Handle)");
+	}
+
+	[Fact]
 	public async Task Should_Fix_Action_Overload_To_Nameof()
 	{
 		const string registration = """

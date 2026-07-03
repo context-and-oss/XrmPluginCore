@@ -111,7 +111,7 @@ public static class DiagnosticDescriptors
 	public static readonly DiagnosticDescriptor PreferTypedCustomApiHandler = new(
 		id: "XPC3007",
 		title: "Prefer the type-safe Custom API handler overload",
-		messageFormat: "This Custom API declares request/response parameters; use 'RegisterAPI<{0}>(name, nameof({0}.Handler))' to generate strongly-typed request/response DTOs instead of the action-based overload",
+		messageFormat: "This Custom API declares request/response parameters; use the typed 'RegisterAPI<{0}>(name, nameof(...))' overload to generate strongly-typed request/response DTOs instead of the action-based overload",
 		category: Category,
 		defaultSeverity: DiagnosticSeverity.Info,
 		isEnabledByDefault: true,

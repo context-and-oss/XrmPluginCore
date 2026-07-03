@@ -12,7 +12,9 @@ namespace XrmPluginCore.SourceGenerator.Helpers;
 internal static class SyntaxFactoryHelper
 {
 	/// <summary>
-	/// Creates a nameof(ServiceType.MethodName) expression.
+	/// Creates a nameof(ServiceType.MethodName) expression. <paramref name="serviceType"/> is parsed
+	/// as a name so qualified (<c>My.Namespace.Service</c>) and generic (<c>Service&lt;T&gt;</c>) type
+	/// names produce valid syntax rather than a single malformed identifier.
 	/// </summary>
 	public static InvocationExpressionSyntax CreateNameofExpression(string serviceType, string methodName)
 	{
@@ -23,7 +25,7 @@ internal static class SyntaxFactoryHelper
 					SyntaxFactory.Argument(
 						SyntaxFactory.MemberAccessExpression(
 							SyntaxKind.SimpleMemberAccessExpression,
-							SyntaxFactory.IdentifierName(serviceType),
+							SyntaxFactory.ParseName(serviceType),
 							SyntaxFactory.IdentifierName(methodName))))));
 	}
 

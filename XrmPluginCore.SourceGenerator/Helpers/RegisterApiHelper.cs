@@ -81,27 +81,42 @@ internal static class RegisterApiHelper
 
 	/// <summary>
 	/// Extracts the handler method name from an action lambda such as <c>s =&gt; s.Handle()</c> or
-	/// <c>s =&gt; s.Handle</c>. Returns null when the lambda body is not a single call to a member of the
-	/// lambda parameter (e.g. a statement block or a more complex expression).
+	/// <c>s =&gt; s.Handle</c>, but only when the member is accessed directly on the lambda parameter.
+	/// Returns null for statement blocks, more complex expressions, or calls whose receiver is not the
+	/// lambda parameter (e.g. <c>s =&gt; Other.Handle()</c> or <c>s =&gt; s.Foo.Handle()</c>), so the
+	/// code fix never offers a misleading <c>nameof(TService.X)</c> for a method that isn't on TService.
 	/// </summary>
 	public static string GetActionMethodName(ExpressionSyntax actionArgument)
 	{
-		var body = actionArgument switch
+		string parameterName;
+		ExpressionSyntax body;
+		switch (actionArgument)
 		{
-			SimpleLambdaExpressionSyntax simpleLambda => simpleLambda.Body,
-			ParenthesizedLambdaExpressionSyntax parenLambda => parenLambda.Body,
+			case SimpleLambdaExpressionSyntax simpleLambda:
+				parameterName = simpleLambda.Parameter.Identifier.Text;
+				body = simpleLambda.Body as ExpressionSyntax;
+				break;
+			case ParenthesizedLambdaExpressionSyntax parenLambda when parenLambda.ParameterList.Parameters.Count == 1:
+				parameterName = parenLambda.ParameterList.Parameters[0].Identifier.Text;
+				body = parenLambda.Body as ExpressionSyntax;
+				break;
+			default:
+				return null;
+		}
+
+		// Unwrap an invocation body (s => s.Handle()) to its member access; a bare member access body
+		// (s => s.Handle, a method group) is used directly.
+		var memberAccess = body switch
+		{
+			InvocationExpressionSyntax invocation => invocation.Expression as MemberAccessExpressionSyntax,
+			MemberAccessExpressionSyntax bareMember => bareMember,
 			_ => null,
 		};
 
-		// s => s.Handle()  — body is an invocation of a member access
-		if (body is InvocationExpressionSyntax bodyInvocation &&
-			bodyInvocation.Expression is MemberAccessExpressionSyntax invokedMember)
-		{
-			return invokedMember.Name.Identifier.Text;
-		}
-
-		// s => s.Handle  — body is a bare member access (method group)
-		if (body is MemberAccessExpressionSyntax memberAccess)
+		// Only accept when the receiver is exactly the lambda parameter (s.Handle), not a different
+		// target (Other.Handle) or a nested access (s.Foo.Handle).
+		if (memberAccess?.Expression is IdentifierNameSyntax receiver &&
+			receiver.Identifier.Text == parameterName)
 		{
 			return memberAccess.Name.Identifier.Text;
 		}

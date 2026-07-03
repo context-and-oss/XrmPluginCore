@@ -53,11 +53,76 @@ internal static class RegisterApiHelper
 	}
 
 	/// <summary>
+	/// Determines whether the invocation binds to a generic action overload
+	/// <c>RegisterAPI&lt;TService&gt;(string name, Action&lt;TService&gt; action)</c> (vs the typed handler-name
+	/// overload). This is the overload that does NOT generate request/response DTOs.
+	/// </summary>
+	public static bool IsActionOverload(InvocationExpressionSyntax invocation, SemanticModel semanticModel)
+	{
+		var method = ResolveMethod(invocation, semanticModel);
+		return method != null
+			&& method.Parameters.Length == 2
+			&& method.Parameters[1].Type.TypeKind == TypeKind.Delegate;
+	}
+
+	/// <summary>
 	/// Returns the <c>name</c> argument expression, resolved by parameter name (so named/reordered
 	/// arguments are honored). Returns null when absent.
 	/// </summary>
 	public static ExpressionSyntax GetNameArgument(InvocationExpressionSyntax invocation, SemanticModel semanticModel)
 		=> ArgumentBinder.GetArgument(invocation, semanticModel, Constants.ParameterName);
+
+	/// <summary>
+	/// Returns the <c>action</c> argument expression (the delegate/lambda), resolved by parameter name.
+	/// Returns null when absent.
+	/// </summary>
+	public static ExpressionSyntax GetActionArgument(InvocationExpressionSyntax invocation, SemanticModel semanticModel)
+		=> ArgumentBinder.GetArgument(invocation, semanticModel, Constants.ParameterAction);
+
+	/// <summary>
+	/// Extracts the handler method name from an action lambda such as <c>s =&gt; s.Handle()</c> or
+	/// <c>s =&gt; s.Handle</c>, but only when the member is accessed directly on the lambda parameter.
+	/// Returns null for statement blocks, more complex expressions, or calls whose receiver is not the
+	/// lambda parameter (e.g. <c>s =&gt; Other.Handle()</c> or <c>s =&gt; s.Foo.Handle()</c>), so the
+	/// code fix never offers a misleading <c>nameof(TService.X)</c> for a method that isn't on TService.
+	/// </summary>
+	public static string GetActionMethodName(ExpressionSyntax actionArgument)
+	{
+		string parameterName;
+		ExpressionSyntax body;
+		switch (actionArgument)
+		{
+			case SimpleLambdaExpressionSyntax simpleLambda:
+				parameterName = simpleLambda.Parameter.Identifier.Text;
+				body = simpleLambda.Body as ExpressionSyntax;
+				break;
+			case ParenthesizedLambdaExpressionSyntax parenLambda when parenLambda.ParameterList.Parameters.Count == 1:
+				parameterName = parenLambda.ParameterList.Parameters[0].Identifier.Text;
+				body = parenLambda.Body as ExpressionSyntax;
+				break;
+			default:
+				return null;
+		}
+
+		// Unwrap an invocation body (s => s.Handle()) to its member access; a bare member access body
+		// (s => s.Handle, a method group) is used directly.
+		var memberAccess = body switch
+		{
+			InvocationExpressionSyntax invocation => invocation.Expression as MemberAccessExpressionSyntax,
+			MemberAccessExpressionSyntax bareMember => bareMember,
+			_ => null,
+		};
+
+		// Only accept when the receiver is exactly the lambda parameter (s.Handle), not a different
+		// target (Other.Handle) or a nested access (s.Foo.Handle).
+		if (memberAccess?.Expression is IdentifierNameSyntax receiver &&
+			receiver.Identifier.Text == parameterName)
+		{
+			return memberAccess.Name.Identifier.Text;
+		}
+
+		return null;
+	}
 
 	/// <summary>
 	/// Returns the <c>handlerMethodName</c> argument expression, resolved by parameter name. Returns null

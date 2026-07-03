@@ -92,6 +92,143 @@ public class DuplicateStepRegistrationAnalyzerTests
 	}
 
 	[Fact]
+	public async Task Should_Report_For_Duplicate_RegisterPluginStep()
+	{
+		var source = WrapPlugin("""
+			            RegisterPluginStep<Account>(EventOperation.Update, ExecutionStage.PostOperation, ctx => { });
+			            RegisterPluginStep<Account>(EventOperation.Update, ExecutionStage.PostOperation, ctx => { });
+			""");
+
+		var diagnostics = await GetDiagnosticsAsync(source);
+
+		diagnostics.Should().ContainSingle(d => d.Id == "XPC2002");
+	}
+
+	[Fact]
+	public async Task Should_Report_For_Duplicate_Const_Message_Name()
+	{
+		var source = WrapPlugin("""
+			            const string Msg = "custom_DoThing";
+			            RegisterStep<Account>(Msg, ExecutionStage.PostOperation, s => { });
+			            RegisterStep<Account>(Msg, ExecutionStage.PostOperation, s => { });
+			""");
+
+		var diagnostics = await GetDiagnosticsAsync(source);
+
+		diagnostics.Should().ContainSingle(d => d.Id == "XPC2002");
+	}
+
+	[Fact]
+	public async Task Should_Report_When_Duplicate_Split_Across_Partial_Declarations()
+	{
+		const string source = """
+			using System;
+			using Microsoft.Xrm.Sdk;
+			using XrmPluginCore;
+			using XrmPluginCore.Enums;
+			using Microsoft.Extensions.DependencyInjection;
+			using XrmPluginCore.Tests.Context.BusinessDomain;
+
+			namespace TestNamespace
+			{
+			    public partial class TestPlugin : Plugin
+			    {
+			        public TestPlugin()
+			        {
+			            RegisterStep<Account, ITestService>(EventOperation.Update, ExecutionStage.PostOperation,
+			                nameof(ITestService.HandleA));
+			            RegisterExtra();
+			        }
+			    }
+
+			    public partial class TestPlugin
+			    {
+			        private void RegisterExtra()
+			        {
+			            RegisterStep<Account, ITestService>(EventOperation.Update, ExecutionStage.PostOperation,
+			                nameof(ITestService.HandleB));
+			        }
+			    }
+
+			    public interface ITestService { void HandleA(); void HandleB(); }
+			}
+			""";
+
+		var diagnostics = await GetDiagnosticsAsync(source);
+
+		diagnostics.Should().ContainSingle(d => d.Id == "XPC2002");
+	}
+
+	[Fact]
+	public async Task Should_Report_When_Derived_Re_Registers_Inherited_Tuple()
+	{
+		const string source = """
+			using System;
+			using Microsoft.Xrm.Sdk;
+			using XrmPluginCore;
+			using XrmPluginCore.Enums;
+			using Microsoft.Extensions.DependencyInjection;
+			using XrmPluginCore.Tests.Context.BusinessDomain;
+
+			namespace TestNamespace
+			{
+			    public class BasePlugin : Plugin
+			    {
+			        public BasePlugin()
+			        {
+			            RegisterStep<Account, ITestService>(EventOperation.Update, ExecutionStage.PostOperation,
+			                nameof(ITestService.HandleA));
+			        }
+			    }
+
+			    public class DerivedPlugin : BasePlugin
+			    {
+			        public DerivedPlugin()
+			        {
+			            RegisterStep<Account, ITestService>(EventOperation.Update, ExecutionStage.PostOperation,
+			                nameof(ITestService.HandleB));
+			        }
+			    }
+
+			    public interface ITestService { void HandleA(); void HandleB(); }
+			}
+			""";
+
+		var diagnostics = await GetDiagnosticsAsync(source);
+
+		var diagnostic = diagnostics.Should().ContainSingle(d => d.Id == "XPC2002").Subject;
+		diagnostic.GetMessage().Should().Contain("DerivedPlugin");
+	}
+
+	[Fact]
+	public async Task Should_Not_Report_For_Non_Plugin_Class_With_RegisterStep_Method()
+	{
+		// A class that is not a Plugin but happens to have a generic RegisterStep<T> method must not
+		// be flagged.
+		const string source = """
+			using XrmPluginCore.Enums;
+
+			namespace TestNamespace
+			{
+			    public class NotAPlugin
+			    {
+			        public NotAPlugin()
+			        {
+			            RegisterStep<object>(EventOperation.Update, ExecutionStage.PostOperation);
+			            RegisterStep<object>(EventOperation.Update, ExecutionStage.PostOperation);
+			        }
+
+			        private void RegisterStep<T>(EventOperation op, ExecutionStage stage) { }
+			    }
+			}
+			""";
+
+		var diagnostics = await GetDiagnosticsAsync(source);
+
+		diagnostics.Should().NotContain(d => d.Id == "XPC2002");
+	}
+
+	[Fact]
 	public async Task Should_Not_Report_Across_Different_Plugin_Classes()
 	{
 		const string source = """

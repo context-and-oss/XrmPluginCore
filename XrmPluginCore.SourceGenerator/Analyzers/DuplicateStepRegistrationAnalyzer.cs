@@ -2,6 +2,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -14,6 +15,10 @@ namespace XrmPluginCore.SourceGenerator.Analyzers;
 /// (via <c>RegisterStep</c> or the legacy <c>RegisterPluginStep</c>). Such a duplicate is rejected at
 /// registration time and would make the source-generated image/wrapper type names — which are derived
 /// from that tuple — ambiguous.
+///
+/// Registrations are collected per plugin type across every syntax tree (so <c>partial</c> plugins are
+/// aggregated) and duplicates are evaluated at compilation end, where inherited base-plugin
+/// registrations are also considered. Only types deriving from <c>XrmPluginCore.Plugin</c> are analyzed.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public class DuplicateStepRegistrationAnalyzer : DiagnosticAnalyzer
@@ -25,61 +30,157 @@ public class DuplicateStepRegistrationAnalyzer : DiagnosticAnalyzer
 	{
 		context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
 		context.EnableConcurrentExecution();
-		context.RegisterSyntaxNodeAction(AnalyzeClass, SyntaxKind.ClassDeclaration);
+		context.RegisterCompilationStartAction(OnCompilationStart);
 	}
 
-	private void AnalyzeClass(SyntaxNodeAnalysisContext context)
+	private static void OnCompilationStart(CompilationStartAnalysisContext context)
 	{
-		var classDeclaration = (ClassDeclarationSyntax)context.Node;
-		var semanticModel = context.SemanticModel;
+		// Accumulate registrations per plugin type across all trees (handles partial declarations).
+		var registrationsByType = new ConcurrentDictionary<INamedTypeSymbol, ConcurrentBag<Registration>>(SymbolEqualityComparer.Default);
 
-		// Key: "{entity}|{operation}|{stage}" -> already seen. Report on the 2nd+ occurrence.
-		var seen = new HashSet<string>();
+		context.RegisterSyntaxNodeAction(
+			nodeContext => CollectRegistration(nodeContext, registrationsByType),
+			SyntaxKind.InvocationExpression);
 
-		foreach (var invocation in classDeclaration.DescendantNodes().OfType<InvocationExpressionSyntax>())
+		context.RegisterCompilationEndAction(endContext => ReportDuplicates(endContext, registrationsByType));
+	}
+
+	private static void CollectRegistration(
+		SyntaxNodeAnalysisContext context,
+		ConcurrentDictionary<INamedTypeSymbol, ConcurrentBag<Registration>> registrationsByType)
+	{
+		var invocation = (InvocationExpressionSyntax)context.Node;
+
+		if (!RegisterStepHelper.IsStepRegistrationCall(invocation, out var genericName) ||
+			genericName.TypeArgumentList.Arguments.Count < 1)
 		{
-			// Scope strictly to this class so registrations in a nested class aren't attributed here
-			// (nested classes are analyzed by their own ClassDeclaration action).
-			if (invocation.FirstAncestorOrSelf<ClassDeclarationSyntax>() != classDeclaration)
+			return;
+		}
+
+		var classDeclaration = invocation.FirstAncestorOrSelf<ClassDeclarationSyntax>();
+		if (classDeclaration == null ||
+			context.SemanticModel.GetDeclaredSymbol(classDeclaration) is not INamedTypeSymbol typeSymbol ||
+			!IsPluginClass(typeSymbol))
+		{
+			return;
+		}
+
+		var entity = context.SemanticModel.GetTypeInfo(genericName.TypeArgumentList.Arguments[0]).Type?.Name;
+
+		var (operationExpr, stageExpr) = RegisterStepHelper.GetOperationAndStageArguments(invocation, context.SemanticModel);
+		if (entity == null || operationExpr == null || stageExpr == null)
+		{
+			return;
+		}
+
+		var operation = ResolveTupleValue(operationExpr, context.SemanticModel);
+		var stage = ResolveTupleValue(stageExpr, context.SemanticModel);
+
+		// Skip registrations whose tuple can't be resolved to concrete values: the generator can't
+		// derive a stable name from them either, so keying them would risk false positives.
+		if (operation == null || stage == null)
+		{
+			return;
+		}
+
+		var location = (RegisterStepHelper.GetGenericName(invocation) ?? (SyntaxNode)invocation).GetLocation();
+		registrationsByType
+			.GetOrAdd(typeSymbol, _ => new ConcurrentBag<Registration>())
+			.Add(new Registration(entity, operation, stage, location));
+	}
+
+	private static void ReportDuplicates(
+		CompilationAnalysisContext context,
+		ConcurrentDictionary<INamedTypeSymbol, ConcurrentBag<Registration>> registrationsByType)
+	{
+		foreach (var entry in registrationsByType)
+		{
+			var type = entry.Key;
+
+			// Seed with registrations inherited from source-defined base plugins so a derived class that
+			// re-registers an inherited tuple is caught. Base-internal duplicates are reported when the
+			// base itself is evaluated, so they are not re-reported here.
+			var seen = new HashSet<string>();
+			for (var baseType = type.BaseType; baseType != null && !IsFrameworkPluginBase(baseType); baseType = baseType.BaseType)
 			{
-				continue;
+				if (registrationsByType.TryGetValue(baseType, out var baseRegistrations))
+				{
+					foreach (var registration in baseRegistrations)
+					{
+						seen.Add(registration.Key);
+					}
+				}
 			}
 
-			if (!RegisterStepHelper.IsStepRegistrationCall(invocation, out var genericName) ||
-				genericName.TypeArgumentList.Arguments.Count < 1)
+			// Order for deterministic reporting (ConcurrentBag is unordered; declarations may span trees).
+			var ordered = entry.Value
+				.OrderBy(r => r.Location.SourceTree?.FilePath, System.StringComparer.Ordinal)
+				.ThenBy(r => r.Location.SourceSpan.Start);
+
+			foreach (var registration in ordered)
 			{
-				continue;
-			}
-
-			var entity = semanticModel.GetTypeInfo(genericName.TypeArgumentList.Arguments[0]).Type?.Name;
-
-			var (operationExpr, stageExpr) = RegisterStepHelper.GetOperationAndStageArguments(invocation, semanticModel);
-			if (entity == null || operationExpr == null || stageExpr == null)
-			{
-				continue;
-			}
-
-			var operation = RegisterStepHelper.ExtractEnumValue(operationExpr);
-			var stage = RegisterStepHelper.ExtractEnumValue(stageExpr);
-
-			// Skip registrations whose tuple can't be resolved to concrete values: the generator can't
-			// derive a stable name from them either, so keying them would risk false positives.
-			if (operation == "Unknown" || stage == "Unknown")
-			{
-				continue;
-			}
-
-			var key = $"{entity}|{operation}|{stage}";
-			if (!seen.Add(key))
-			{
-				context.ReportDiagnostic(Diagnostic.Create(
-					DiagnosticDescriptors.DuplicateStepRegistration,
-					(RegisterStepHelper.GetGenericName(invocation) ?? (SyntaxNode)invocation).GetLocation(),
-					classDeclaration.Identifier.Text,
-					entity,
-					operation,
-					stage));
+				if (!seen.Add(registration.Key))
+				{
+					context.ReportDiagnostic(Diagnostic.Create(
+						DiagnosticDescriptors.DuplicateStepRegistration,
+						registration.Location,
+						type.Name,
+						registration.Entity,
+						registration.Operation,
+						registration.Stage));
+				}
 			}
 		}
+	}
+
+	/// <summary>
+	/// Resolves an operation/stage argument to its comparison value: an enum member access yields the
+	/// member name (matching <c>EventOperation.Update.ToString()</c>), while a string literal or
+	/// <c>const</c> reference is resolved to its compile-time constant value. Returns null when neither
+	/// applies.
+	/// </summary>
+	private static string ResolveTupleValue(ExpressionSyntax expression, SemanticModel semanticModel)
+	{
+		if (expression is MemberAccessExpressionSyntax memberAccess)
+		{
+			return memberAccess.Name.Identifier.Text;
+		}
+
+		var constant = semanticModel.GetConstantValue(expression);
+		return constant.HasValue ? constant.Value as string : null;
+	}
+
+	private static bool IsPluginClass(INamedTypeSymbol type)
+	{
+		for (var baseType = type.BaseType; baseType != null; baseType = baseType.BaseType)
+		{
+			if (IsFrameworkPluginBase(baseType))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private static bool IsFrameworkPluginBase(INamedTypeSymbol type) =>
+		type.Name == Constants.PluginBaseClassName &&
+		type.ContainingNamespace?.ToDisplayString() == Constants.PluginNamespace;
+
+	private readonly struct Registration
+	{
+		public Registration(string entity, string operation, string stage, Location location)
+		{
+			Entity = entity;
+			Operation = operation;
+			Stage = stage;
+			Location = location;
+		}
+
+		public string Entity { get; }
+		public string Operation { get; }
+		public string Stage { get; }
+		public Location Location { get; }
+		public string Key => $"{Entity}|{Operation}|{Stage}";
 	}
 }

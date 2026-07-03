@@ -18,8 +18,6 @@ namespace XrmPluginCore.SourceGenerator.CodeFixes;
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(LocalPluginContextAsServiceCodeFixProvider)), Shared]
 public class LocalPluginContextAsServiceCodeFixProvider : CodeFixProvider
 {
-	private const string RegisterPluginStepMethodName = "RegisterPluginStep";
-
 	public sealed override ImmutableArray<string> FixableDiagnosticIds =>
 		ImmutableArray.Create(DiagnosticDescriptors.LocalPluginContextAsService.Id);
 
@@ -82,7 +80,7 @@ public class LocalPluginContextAsServiceCodeFixProvider : CodeFixProvider
 
 		// Build new generic name: RegisterPluginStep<TEntity>
 		var newGenericName = SyntaxFactory.GenericName(
-			SyntaxFactory.Identifier(RegisterPluginStepMethodName),
+			SyntaxFactory.Identifier(Constants.RegisterPluginStepMethodName),
 			newTypeArgList);
 
 		ExpressionSyntax newExpression;

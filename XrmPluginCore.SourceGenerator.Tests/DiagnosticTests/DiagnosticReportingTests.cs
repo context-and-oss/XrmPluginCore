@@ -1004,7 +1004,7 @@ public class DiagnosticReportingTests
 
 		// Verify PreImage class is generated
 		var generatedSource = result.GeneratedTrees.First().ToString();
-		generatedSource.Should().Contain("public sealed class PreImage",
+		generatedSource.Should().Contain("public sealed class TestPluginAccountUpdatePostOperationPreImage",
 			"PreImage class should be generated to allow developers to create the handler method with correct signature");
 	}
 
@@ -1064,10 +1064,10 @@ public class DiagnosticReportingTests
 
 		// Verify PreImage class is generated
 		var generatedSource = result.GeneratedTrees.First().ToString();
-		generatedSource.Should().Contain("public sealed class PreImage",
+		generatedSource.Should().Contain("public sealed class TestPluginAccountUpdatePostOperationPreImage",
 			"PreImage class should be generated to allow developers to create the handler method with correct signature");
 
-		generatedSource.Should().Contain("namespace TestNamespace.PluginRegistrations.TestPlugin.AccountUpdatePostOperation",
+		generatedSource.Should().Contain("namespace TestNamespace",
 			"Generated types should be in the correct namespace");
 	}
 
@@ -1160,14 +1160,14 @@ public class DiagnosticReportingTests
 
 		// Verify Namespace1 source: correct namespace AND correct property (Name)
 		var namespace1Source = sourcesByHintName[namespace1HintName];
-		namespace1Source.Should().Contain("namespace Namespace1.PluginRegistrations.AccountPlugin.AccountUpdatePostOperation",
+		namespace1Source.Should().Contain("namespace Namespace1",
 			"Namespace1 hint name should map to Namespace1 generated namespace");
 		namespace1Source.Should().Contain("public string? Name =>",
 			"Namespace1 plugin registered Name attribute");
 
 		// Verify Namespace2 source: correct namespace AND correct property (AccountNumber)
 		var namespace2Source = sourcesByHintName[namespace2HintName];
-		namespace2Source.Should().Contain("namespace Namespace2.PluginRegistrations.AccountPlugin.AccountUpdatePostOperation",
+		namespace2Source.Should().Contain("namespace Namespace2",
 			"Namespace2 hint name should map to Namespace2 generated namespace");
 		namespace2Source.Should().Contain("public string? AccountNumber =>",
 			"Namespace2 plugin registered AccountNumber attribute");

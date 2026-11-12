@@ -13,7 +13,8 @@ using XrmPluginCore.SourceGenerator.Helpers;
 namespace XrmPluginCore.SourceGenerator.CodeFixes;
 
 /// <summary>
-/// Code fix provider that creates a missing handler method on a service interface.
+/// Code fix provider that creates a missing handler method on a service interface. Image parameters are
+/// emitted with their fully-qualified generated wrapper type names, so no using directive is needed.
 /// </summary>
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(CreateHandlerMethodCodeFixProvider)), Shared]
 public class CreateHandlerMethodCodeFixProvider : CodeFixProvider
@@ -22,7 +23,7 @@ public class CreateHandlerMethodCodeFixProvider : CodeFixProvider
 		ImmutableArray.Create(DiagnosticDescriptors.HandlerMethodNotFound.Id);
 
 	public sealed override FixAllProvider GetFixAllProvider() =>
-		AliasedImageUsingsFixAllProvider.Instance;
+		WellKnownFixAllProviders.BatchFixer;
 
 	public sealed override async Task RegisterCodeFixesAsync(CodeFixContext context)
 	{
@@ -41,12 +42,25 @@ public class CreateHandlerMethodCodeFixProvider : CodeFixProvider
 			return;
 		}
 
-		diagnostic.Properties.TryGetValue(Constants.PropertyHasPreImage, out var hasPreImageStr);
-		diagnostic.Properties.TryGetValue(Constants.PropertyHasPostImage, out var hasPostImageStr);
-		diagnostic.Properties.TryGetValue(Constants.PropertyImageNamespace, out var imageNamespace);
+		diagnostic.Properties.TryGetValue(Constants.PropertyPreImageType, out var preImageType);
+		diagnostic.Properties.TryGetValue(Constants.PropertyPostImageType, out var postImageType);
 
-		var hasPreImage = bool.TryParse(hasPreImageStr, out var pre) && pre;
-		var hasPostImage = bool.TryParse(hasPostImageStr, out var post) && post;
+		// The analyzer reports HasPreImage/HasPostImage unconditionally but only supplies the generated
+		// wrapper type name when it can resolve it. If an image is registered but its type name is
+		// missing, we can't emit a correct signature — don't offer a fix that would create a
+		// permanently mismatched, param-less method.
+		diagnostic.Properties.TryGetValue(Constants.PropertyHasPreImage, out var expectsPreImageStr);
+		diagnostic.Properties.TryGetValue(Constants.PropertyHasPostImage, out var expectsPostImageStr);
+		var expectsPreImage = bool.TryParse(expectsPreImageStr, out var ep) && ep;
+		var expectsPostImage = bool.TryParse(expectsPostImageStr, out var eq) && eq;
+		if ((expectsPreImage && string.IsNullOrEmpty(preImageType)) ||
+			(expectsPostImage && string.IsNullOrEmpty(postImageType)))
+		{
+			return;
+		}
+
+		var hasPreImage = !string.IsNullOrEmpty(preImageType);
+		var hasPostImage = !string.IsNullOrEmpty(postImageType);
 
 		// Build the title showing expected signature
 		var signatureDescription = SyntaxFactoryHelper.BuildSignatureDescription(hasPreImage, hasPostImage);
@@ -55,7 +69,7 @@ public class CreateHandlerMethodCodeFixProvider : CodeFixProvider
 		context.RegisterCodeFix(
 			CodeAction.Create(
 				title: title,
-				createChangedSolution: c => CreateMethodAsync(context.Document, diagnostic, serviceType!, methodName!, hasPreImage, hasPostImage, imageNamespace, c),
+				createChangedSolution: c => CreateMethodAsync(context.Document, diagnostic, methodName!, preImageType, postImageType, c),
 				equivalenceKey: nameof(CreateHandlerMethodCodeFixProvider)),
 			diagnostic);
 	}
@@ -63,23 +77,19 @@ public class CreateHandlerMethodCodeFixProvider : CodeFixProvider
 	private static async Task<Solution> CreateMethodAsync(
 		Document document,
 		Diagnostic diagnostic,
-		string serviceTypeName,
 		string methodName,
-		bool hasPreImage,
-		bool hasPostImage,
-		string imageNamespace,
+		string preImageType,
+		string postImageType,
 		CancellationToken cancellationToken)
 	{
 		var solution = document.Project.Solution;
 
-		// Get semantic model to find the service type declaration
 		var semanticModel = await document.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
 		if (semanticModel == null)
 		{
 			return solution;
 		}
 
-		// Find the RegisterStep call to get the service type
 		var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
 		if (root == null)
 		{
@@ -96,7 +106,6 @@ public class CreateHandlerMethodCodeFixProvider : CodeFixProvider
 			return solution;
 		}
 
-		// Get service type from generic arguments
 		var genericName = RegisterStepHelper.GetGenericName(registerStepInvocation);
 		if (genericName == null || genericName.TypeArgumentList.Arguments.Count < 2)
 		{
@@ -105,21 +114,17 @@ public class CreateHandlerMethodCodeFixProvider : CodeFixProvider
 
 		var serviceTypeSyntax = genericName.TypeArgumentList.Arguments[1];
 		var typeInfo = semanticModel.GetTypeInfo(serviceTypeSyntax, cancellationToken);
-		var serviceTypeSymbol = typeInfo.Type as INamedTypeSymbol;
-
-		if (serviceTypeSymbol == null)
+		if (typeInfo.Type is not INamedTypeSymbol serviceTypeSymbol)
 		{
 			return solution;
 		}
 
-		// Find the interface declaration in the solution
 		var interfaceDeclaration = await FindInterfaceDeclarationAsync(solution, serviceTypeSymbol, cancellationToken);
 		if (interfaceDeclaration == null)
 		{
 			return solution;
 		}
 
-		// Add the method to the interface
 		var interfaceDocument = solution.GetDocument(interfaceDeclaration.SyntaxTree);
 		if (interfaceDocument == null)
 		{
@@ -132,50 +137,21 @@ public class CreateHandlerMethodCodeFixProvider : CodeFixProvider
 			return solution;
 		}
 
-		// Always qualify the image parameters with the namespace alias.
-		var alias = string.IsNullOrEmpty(imageNamespace)
-			? null
-			: SyntaxFactoryHelper.GetAliasForImageNamespace(imageNamespace);
+		var methodDeclaration = CreateMethodDeclaration(methodName, preImageType, postImageType);
 
-		var methodDeclaration = CreateMethodDeclaration(methodName, hasPreImage, hasPostImage, alias);
-
-		// Annotate the exact interface node so we can locate it precisely after the using rewrite,
-		// rather than re-finding by identifier text (which is ambiguous when several interfaces share
-		// a name across namespaces or as nested types).
-		var interfaceAnnotation = new SyntaxAnnotation();
-		var annotatedRoot = interfaceRoot.ReplaceNode(
-			interfaceDeclaration,
-			interfaceDeclaration.WithAdditionalAnnotations(interfaceAnnotation));
-
-		// Emit the aliased using and requalify existing image references FIRST, so the rewriter
-		// resolves bare references against a semantic model whose nodes still match. Annotating the
-		// node above produced a new tree, so build the semantic model from a compilation with that
-		// tree swapped in — the annotation doesn't affect binding, so references resolve identically.
-		// The created method's parameters are already alias-qualified, so requalification skips them.
-		// The interface may live in a different tree than the trigger.
-		var annotatedTree = annotatedRoot.SyntaxTree;
-		var annotatedCompilation = semanticModel.Compilation.ReplaceSyntaxTree(interfaceRoot.SyntaxTree, annotatedTree);
-		var interfaceSemanticModel = annotatedCompilation.GetSemanticModel(annotatedTree);
-		var newRoot = SyntaxFactoryHelper.ApplyAliasedImageUsings(annotatedRoot, imageNamespace, interfaceSemanticModel);
-
-		// Then add the method to the annotated interface declaration.
-		var targetInterface = newRoot.GetAnnotatedNodes(interfaceAnnotation)
-			.OfType<InterfaceDeclarationSyntax>()
-			.FirstOrDefault();
-		if (targetInterface != null)
-		{
-			newRoot = newRoot.ReplaceNode(targetInterface, targetInterface.AddMembers(methodDeclaration));
-		}
+		// The generated wrapper types are referenced by fully-qualified name, so the method can be added
+		// directly with no using-directive juggling.
+		var newRoot = interfaceRoot.ReplaceNode(interfaceDeclaration, interfaceDeclaration.AddMembers(methodDeclaration));
 
 		return solution.WithDocumentSyntaxRoot(interfaceDocument.Id, newRoot);
 	}
 
-	internal static MethodDeclarationSyntax CreateMethodDeclaration(string methodName, bool hasPreImage, bool hasPostImage, string qualifier = null)
+	internal static MethodDeclarationSyntax CreateMethodDeclaration(string methodName, string preImageType, string postImageType)
 	{
 		return SyntaxFactory.MethodDeclaration(
 				SyntaxFactory.PredefinedType(SyntaxFactory.Token(SyntaxKind.VoidKeyword)),
 				SyntaxFactory.Identifier(methodName))
-			.WithParameterList(SyntaxFactoryHelper.CreateImageParameterList(hasPreImage, hasPostImage, qualifier))
+			.WithParameterList(SyntaxFactoryHelper.CreateImageParameterList(preImageType, postImageType))
 			.WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken))
 			.WithLeadingTrivia(SyntaxFactory.ElasticCarriageReturnLineFeed, SyntaxFactory.ElasticTab)
 			.WithTrailingTrivia(SyntaxFactory.ElasticCarriageReturnLineFeed);

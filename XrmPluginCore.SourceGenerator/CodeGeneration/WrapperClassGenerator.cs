@@ -26,7 +26,9 @@ internal static class WrapperClassGenerator
 		// File header and using directives
 		sb.Append(GetFileHeader(metadata.NullableAnnotationsEnabled));
 
-		var namespaceToUse = metadata.RegistrationNamespace;
+		// Generated types live in the plugin's own namespace with registration-derived names, so no
+		// per-registration namespace (and no aliased-usings juggling) is needed.
+		var namespaceToUse = metadata.Namespace;
 
 		// Namespace declaration
 		sb.AppendLine($"namespace {namespaceToUse}");
@@ -51,7 +53,7 @@ internal static class WrapperClassGenerator
 	/// </summary>
 	private static void GenerateImageWrapperClass(StringBuilder sb, PluginStepMetadata metadata, ImageMetadata image)
 	{
-		var className = image.WrapperClassName;
+		var className = metadata.ImageClassName(image.ImageType);
 
 		// Class header with documentation, attribute, field, and constructor
 		sb.Append(GetImageClassHeader(
@@ -90,6 +92,7 @@ internal static class WrapperClassGenerator
 
 		// ActionWrapper header with documentation, class declaration, and service retrieval
 		sb.Append(GetActionWrapperHeader(
+			metadata.ActionWrapperClassName,
 			metadata.ServiceTypeName,
 			metadata.HandlerMethodName,
 			metadata.ServiceTypeFullName));
@@ -105,13 +108,13 @@ internal static class WrapperClassGenerator
 		if (hasPreImage)
 		{
 			sb.AppendLine();
-			sb.Append(GetPreImageRetrieval());
+			sb.Append(GetPreImageRetrieval(metadata.ImageClassName(Constants.PreImageTypeName)));
 			args.Add("preImage");
 		}
 		if (hasPostImage)
 		{
 			sb.AppendLine();
-			sb.Append(GetPostImageRetrieval());
+			sb.Append(GetPostImageRetrieval(metadata.ImageClassName(Constants.PostImageTypeName)));
 			args.Add("postImage");
 		}
 
@@ -221,12 +224,12 @@ using XrmPluginCore;
 			: $"{L2}[System.Obsolete({messageLiteral})]\n";
 	}
 
-	private static string GetActionWrapperHeader(string serviceTypeName, string methodName, string serviceFullName) =>
+	private static string GetActionWrapperHeader(string actionWrapperClassName, string serviceTypeName, string methodName, string serviceFullName) =>
 		$"{L1}/// <summary>\n" +
 		$"{L1}/// Generated action wrapper for {serviceTypeName}.{methodName}\n" +
 		$"{L1}/// </summary>\n" +
 		$"{L1}[CompilerGenerated]\n" +
-		$"{L1}internal sealed class ActionWrapper : IActionWrapper\n" +
+		$"{L1}internal sealed class {actionWrapperClassName} : IActionWrapper\n" +
 		$"{L1}{{\n" +
 		$"{L2}/// <summary>\n" +
 		$"{L2}/// Creates the action delegate that invokes the service method with appropriate images.\n" +
@@ -237,13 +240,13 @@ using XrmPluginCore;
 		$"{L3}{{\n" +
 		$"{L4}var service = serviceProvider.GetRequiredService<{serviceFullName}>();";
 
-	private static string GetPreImageRetrieval() =>
+	private static string GetPreImageRetrieval(string preImageClassName) =>
 		$"{L4}var preImageEntity = context?.PreEntityImages?.Values?.FirstOrDefault();\n" +
-		$"{L4}var preImage = preImageEntity != null ? new PreImage(preImageEntity) : null;";
+		$"{L4}var preImage = preImageEntity != null ? new {preImageClassName}(preImageEntity) : null;";
 
-	private static string GetPostImageRetrieval() =>
+	private static string GetPostImageRetrieval(string postImageClassName) =>
 		$"{L4}var postImageEntity = context?.PostEntityImages?.Values?.FirstOrDefault();\n" +
-		$"{L4}var postImage = postImageEntity != null ? new PostImage(postImageEntity) : null;";
+		$"{L4}var postImage = postImageEntity != null ? new {postImageClassName}(postImageEntity) : null;";
 
 	private static string GetActionWrapperFooter(string methodName, string argsString) =>
 		$"{L4}service.{methodName}({argsString});\n" +

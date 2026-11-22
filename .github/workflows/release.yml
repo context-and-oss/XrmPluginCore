@@ -1,92 +1,103 @@
 name: Release
 
 on:
-  release:
-    types: [released]
-  workflow_dispatch:
-    inputs:
-      dry_run:
-        description: 'Perform a dry run (skip actual NuGet publish)'
-        required: false
-        default: true
-        type: boolean
+  push:
+    tags:
+      - 'core-v*.*.*'
+      - 'abstractions-v*.*.*'
+
+concurrency:
+  group: release-${{ github.ref }}
 
 jobs:
-  build:
+  release:
     runs-on: windows-latest
     permissions:
-      contents: write      # For release asset upload
-      id-token: write      # Required for OIDC token (NuGet Trusted Publishing)
+      contents: write     # Create the GitHub release and upload its assets
+      id-token: write     # NuGet Trusted Publishing
+    defaults:
+      run:
+        shell: bash
     steps:
-    - name: 🚚 Checkout code
-      uses: actions/checkout@v7
-
-    - name: 🛠️ Setup .NET
-      uses: actions/setup-dotnet@v5
-      with:
-        dotnet-version: 10.x
-
-    - name: 📦 Restore dependencies
-      run: dotnet restore
-
-    - name: 🔨 Build
-      run: dotnet build --configuration Release --no-restore
-
-    - name: ✅ Run tests
-      run: dotnet test --configuration Release --no-build --verbosity normal
-
-    - name: 📦 Pack
-      run: dotnet pack --configuration Release --no-build --output ./nupkg
-
-    - name: 📤 Upload artifacts
-      uses: actions/upload-artifact@v7
-      with:
-        name: packages
-        path: ./nupkg
-
-    - name: 📎 Add packages to release
-      uses: softprops/action-gh-release@v3
-      if: github.event_name == 'release'
-      with:
-        tag_name: ${{ github.event.release.tag_name }}
-        files: |
-          ./nupkg/*.nupkg
-          ./nupkg/*.snupkg
-
-    - name: 🔑 Login to NuGet (OIDC)
-      id: nuget-login
-      uses: nuget/login@v1
-      if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true')
-      with:
-        user: ${{ secrets.NUGET_USER }}
-
-    - name: 🚀 Publish to NuGet
-      shell: pwsh
-      run: |
-        Write-Host "Looking for nupkg files..."
-        $nupkgFiles = Get-ChildItem -Path "./nupkg/*.nupkg" -File
-          
-        if ($nupkgFiles.Count -eq 0) {
-            Write-Host "No nupkg files found in nupkg"
+      - name: 🏷️ Select package and version from tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [[ ! "$TAG" =~ ^(core|abstractions)-v((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*))$ ]]; then
+            echo "::error::Expected a release tag of the form core-vX.Y.Z or abstractions-vX.Y.Z."
             exit 1
-        }
-          
-        Write-Host "Found $($nupkgFiles.Count) nupkg file(s):"
-        foreach ($file in $nupkgFiles) {
-            Write-Host "  Full path: $($file.FullName)"
-            Write-Host "  Size: $([math]::Round($file.Length / 1KB, 2)) KB"
-        }
-          
-        # For automatic triggers (push tags), always publish
-        # For manual triggers, only publish if dry_run is explicitly set to false
-        $isDryRun = "${{ github.event_name }}" -eq "workflow_dispatch" -and "${{ github.event.inputs.dry_run }}" -ne "false"
-          
-        if ($isDryRun) {
-            Write-Host "Dry run mode - skipping NuGet publish"
-        } else {
-            Write-Host "Publishing to NuGet..."
-            foreach ($file in $nupkgFiles) {
-                Write-Host "Publishing: $($file.FullName)"
-                dotnet nuget push "$($file.FullName)" --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} --source "https://api.nuget.org/v3/index.json" --skip-duplicate
-            }
-        }
+          fi
+
+          kind=${BASH_REMATCH[1]}
+          version=${BASH_REMATCH[2]}
+          if [[ "$kind" == core ]]; then
+            package=XrmPluginCore
+            version_property=ReleaseCoreVersion
+          else
+            package=XrmPluginCore.Abstractions
+            version_property=ReleaseAbstractionsVersion
+          fi
+
+          {
+            echo "$version_property=$version"
+            echo "RELEASE_PACKAGE=$package"
+            echo "RELEASE_VERSION=$version"
+            echo "NUGET_PACKAGE=./nupkg/$package.$version.nupkg"
+            echo "SYMBOL_PACKAGE=./nupkg/$package.$version.snupkg"
+          } >> "$GITHUB_ENV"
+
+      - name: 🚚 Checkout tagged code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: 🛠️ Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.x
+
+      - name: 📦 Restore dependencies
+        run: dotnet restore
+
+      - name: 🔨 Build
+        run: dotnet build --configuration Release --no-restore -p:GeneratePackageOnBuild=false
+
+      - name: ✅ Run tests
+        run: dotnet test --configuration Release --no-build --verbosity normal
+
+      - name: 📦 Pack selected package
+        run: |
+          dotnet pack "$RELEASE_PACKAGE/$RELEASE_PACKAGE.csproj" --configuration Release --no-build --output ./nupkg
+          for artifact in "$NUGET_PACKAGE" "$SYMBOL_PACKAGE"; do
+            if [[ ! -f "$artifact" ]]; then
+              echo "::error::Expected release artifact not found: $artifact"
+              exit 1
+            fi
+          done
+
+      - name: 📤 Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ github.ref_name }}
+          path: ./nupkg
+          if-no-files-found: error
+
+      - name: 🔑 Login to NuGet (OIDC)
+        id: nuget-login
+        uses: nuget/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: 🚀 Publish to NuGet
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+        run: dotnet nuget push "$NUGET_PACKAGE" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - name: 📎 Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" "$NUGET_PACKAGE" "$SYMBOL_PACKAGE" \
+            --verify-tag --title "$RELEASE_PACKAGE $RELEASE_VERSION" --generate-notes

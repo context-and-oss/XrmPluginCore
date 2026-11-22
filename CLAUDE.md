@@ -14,6 +14,8 @@ The project consists of:
 
 ## Build & Test Commands
 
+Use the .NET 10 SDK to build the solution.
+
 ```bash
 # Restore dependencies
 dotnet restore
@@ -21,11 +23,11 @@ dotnet restore
 # Build the solution (Release configuration)
 dotnet build --configuration Release --no-restore
 
-# Run all tests
+# Run all tests (Windows is required for .NET Framework targets)
 dotnet test --configuration Release --no-build --verbosity normal
 
 # Run tests for a specific framework
-dotnet test --configuration Release --framework net8.0
+dotnet test --configuration Release --framework net10.0
 
 # Pack NuGet packages locally
 ./scripts/Pack-Local.ps1
@@ -428,13 +430,11 @@ public class AccountPlugin : Plugin
 
 ### Multi-Targeting
 
-The library targets both .NET Framework 4.6.2 and .NET 8 to support:
-- Traditional on-premise Dynamics 365 deployments (net462)
-- Modern Dataverse environments (net8)
+The library targets .NET 10 (`net10.0`), .NET Framework 4.8 (`net48`), and .NET Framework 4.6.2 (`net462`) for legacy deployments. The abstractions and source generator remain on .NET Standard 2.0.
 
 Different SDK packages are used per framework:
-- net462: `Microsoft.CrmSdk.CoreAssemblies` 9.0.2.59
-- net8: `Microsoft.PowerPlatform.Dataverse.Client` 1.2.3
+- `net462` and `net48`: `Microsoft.CrmSdk.CoreAssemblies` 9.0.2.59
+- `net10.0`: `Microsoft.PowerPlatform.Dataverse.Client` 1.2.27
 
 ## Key Patterns
 
@@ -498,7 +498,7 @@ Plugins are deployed to Dynamics 365 as ILMerged assemblies containing all depen
 - Microsoft.Extensions.DependencyInjection.Abstractions.dll
 - Microsoft.Bcl.AsyncInterfaces.dll
 
-Registration is automated using XrmSync (https://github.com/delegateas/XrmSync), which reads the IPluginDefinition and ICustomApiDefinition interfaces.
+Registration is automated using XrmSync (https://github.com/context-and-oss/XrmSync), which reads the IPluginDefinition and ICustomApiDefinition interfaces.
 
 ## Versioning
 
@@ -555,16 +555,7 @@ When developing or debugging the source generator, use the following workflow to
 
 ### Inspecting Generated Output
 
-To see what the source generator produces, add these properties to the test project's .csproj:
-
-```xml
-<PropertyGroup>
-  <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
-  <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)Generated</CompilerGeneratedFilesOutputPath>
-</PropertyGroup>
-```
-
-Generated files appear in `obj/Generated/XrmPluginCore.SourceGenerator/`.
+`XrmPluginCore.Tests` enables `EmitCompilerGeneratedFiles`. The SDK writes the output to `XrmPluginCore.Tests/obj/<configuration>/<target-framework>/generated/XrmPluginCore.SourceGenerator/`, keeping the generated files separate for each target framework.
 
 ### Important Notes
 

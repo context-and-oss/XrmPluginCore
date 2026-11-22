@@ -14,7 +14,7 @@ namespace XrmPluginCore.SourceGenerator;
 public static class DiagnosticDescriptors
 {
 	private const string Category = "XrmPluginCore.SourceGenerator";
-	private const string HelpLinkBaseUri = "https://github.com/delegateas/XrmPluginCore/blob/main/XrmPluginCore.SourceGenerator/rules";
+	private const string HelpLinkBaseUri = "https://github.com/context-and-oss/XrmPluginCore/blob/main/XrmPluginCore.SourceGenerator/rules";
 
 	public static readonly DiagnosticDescriptor GenerationSuccess = new(
 		id: "XPC1001",

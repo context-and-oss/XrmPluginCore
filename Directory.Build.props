@@ -4,8 +4,12 @@
     <Company>Context&amp; A/S</Company>
     <Authors>Context&amp;</Authors>
     <Copyright>Copyright (c) Context&amp; A/S</Copyright>
-    <RepositoryUrl>https://github.com/delegateas/XrmPluginCore</RepositoryUrl>
+    <RepositoryUrl>https://github.com/context-and-oss/XrmPluginCore</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
+
+    <!-- The .NET SDK provides GitHub Source Link. Normalize source paths only in CI
+         so local builds retain paths for local debugging. -->
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
 
     <!-- Consistent language version (C# 14) -->
     <LangVersion>14</LangVersion>
@@ -27,7 +31,12 @@
 
   <!-- Centralized Dataverse SDK references for projects that need them -->
   <ItemGroup Condition="'$(UseDataverseSdk)' == 'true'">
-    <PackageReference Include="Microsoft.CrmSdk.CoreAssemblies" Version="9.0.2.59" Condition="'$(TargetFramework)' == 'net462'" />
-    <PackageReference Include="Microsoft.PowerPlatform.Dataverse.Client" Version="1.2.3" Condition="'$(TargetFramework)' == 'net8.0' Or '$(TargetFramework)' == 'net8'" />
+    <PackageReference Include="Microsoft.CrmSdk.CoreAssemblies" Version="9.0.2.59" Condition="'$(TargetFramework)' == 'net462' Or '$(TargetFramework)' == 'net48'" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UseDataverseSdk)' == 'true' And '$(TargetFramework)' == 'net10.0'">
+    <PackageReference Include="Microsoft.PowerPlatform.Dataverse.Client" Version="1.2.27" />
+    <!-- Override the Dataverse client's vulnerable transitive XML and PKCS crypto dependencies. -->
+    <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.15" />
   </ItemGroup>
 </Project>

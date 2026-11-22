@@ -2,7 +2,8 @@
 ![XrmPluginCore NuGet Version](https://img.shields.io/nuget/v/XrmPluginCore?label=XrmPluginCore%20NuGet)
 ![XrmPluginCore.Abstractions NuGet Version](https://img.shields.io/nuget/v/XrmPluginCore.Abstractions?label=Abstractions%20NuGet)
 ![.NET Framework 4.6.2](https://img.shields.io/badge/.NET-4.6.2-blue)
-![.NET 8](https://img.shields.io/badge/.NET-8-blue)
+![.NET Framework 4.8](https://img.shields.io/badge/.NET-4.8-blue)
+![.NET 10](https://img.shields.io/badge/.NET-10-blue)
 
 XrmPluginCore provides base functionality for developing plugins and custom APIs in Dynamics 365. It includes context wrappers and registration utilities to streamline the development process.
 
@@ -14,7 +15,11 @@ XrmPluginCore provides base functionality for developing plugins and custom APIs
 - **Registration Utilities**: Easily register plugins and custom APIs
 - **Type-Safe Images**: Compile-time type safety for PreImages and PostImages via source generators
 - **Type-Safe Custom APIs**: Generated request/response classes for Custom APIs via source generators
-- **Compatibility**: Supports .NET Framework 4.6.2 and .NET 8
+- **Compatibility**: Supports .NET 10 and .NET Framework 4.8, with .NET Framework 4.6.2 retained for legacy deployments
+
+## Debugging NuGet packages
+
+XrmPluginCore and XrmPluginCore.Abstractions ship Source Link-enabled symbols. To step into the exact source used to build a package, enable Source Link and the NuGet.org symbol server in your debugger. The source generator bundled with XrmPluginCore carries its symbols in the analyzer DLL.
 
 ## Usage
 
@@ -307,7 +312,7 @@ The following services are available for injection into your plugin or custom AP
 | [IPluginExecutionContext5 🔗](https://learn.microsoft.com/en-us/dotnet/api/microsoft.xrm.sdk.ipluginexecutioncontext5) | Extension to IPluginExecutionContext4 with additional properties and methods. |
 | [IPluginExecutionContext6 🔗](https://learn.microsoft.com/en-us/dotnet/api/microsoft.xrm.sdk.ipluginexecutioncontext6) | Extension to IPluginExecutionContext5 with additional properties and methods. |
 | [IPluginExecutionContext7 🔗](https://learn.microsoft.com/en-us/dotnet/api/microsoft.xrm.sdk.ipluginexecutioncontext7) | Extension to IPluginExecutionContext6 with additional properties and methods. |
-| [ITracingService 🔗](https://learn.microsoft.com/en-us/dotnet/api/microsoft.xrm.sdk.itracingservice) | The tracing service interface. The actual class is the [ExtendedTracingService](https://github.com/delegateas/XrmPluginCore/blob/main/XrmPluginCore/ExtendedTracingService.cs) wrapping the built-in `ITracingService` |
+| [ITracingService 🔗](https://learn.microsoft.com/en-us/dotnet/api/microsoft.xrm.sdk.itracingservice) | The tracing service interface. The actual class is the [ExtendedTracingService](https://github.com/context-and-oss/XrmPluginCore/blob/main/XrmPluginCore/ExtendedTracingService.cs) wrapping the built-in `ITracingService` |
 
 *Note:* Links marked with 🔗 point to official Microsoft documentation.
 
@@ -315,7 +320,7 @@ To register additional services, override the `OnBeforeBuildServiceProvider` met
 
 ### Registering a Plugin
 
-Use [XrmSync](https://github.com/delegateas/XrmSync) to automatically register relevant plugin steps and images.
+Use [XrmSync](https://github.com/context-and-oss/XrmSync) to automatically register relevant plugin steps and images.
 
 #### Including dependent assemblies
 

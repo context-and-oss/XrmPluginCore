@@ -3,6 +3,8 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <IsRoslynComponent>true</IsRoslynComponent>
+    <!-- The analyzer DLL is bundled without a separate PDB, so keep its Source Link data in the DLL. -->
+    <DebugType>embedded</DebugType>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
 		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>

@@ -1,7 +1,7 @@
 using Microsoft.CodeAnalysis;
 using System.Collections.Generic;
 using System.Linq;
-using XrmPluginCore.SourceGenerator.Helpers;
+using XrmPluginCore.Internal;
 
 namespace XrmPluginCore.SourceGenerator.Models;
 
@@ -46,28 +46,18 @@ internal sealed class PluginStepMetadata
 	/// </summary>
 	public List<DiagnosticInfo> Diagnostics { get; set; } = [];
 
-	/// <summary>
-	/// The identifier prefix shared by every generated type for this registration, derived from the
-	/// registration tuple and sanitized into a valid identifier. Uniqueness within the plugin namespace
-	/// is guaranteed by XPC2002 (one registration per entity/operation/stage per plugin) and by distinct
-	/// plugin class names. Kept in sync with the runtime discovery in <c>Plugin.RegisterStep</c>.
-	/// </summary>
+	/// <summary>The registration-derived prefix shared by image types and the step action.</summary>
 	public string TypePrefix =>
-		IdentifierHelper.Sanitize($"{PluginClassName}{EntityTypeName}{EventOperation}{ExecutionStage}");
+		PluginStepTypeNames.Prefix(PluginClassName, EntityTypeName, EventOperation, ExecutionStage);
 
 	/// <summary>The generated wrapper class name for the given image type (e.g. "...PreImage").</summary>
 	public string ImageClassName(string imageType) => $"{TypePrefix}{imageType}";
 
-	/// <summary>The generated ActionWrapper class name for this registration.</summary>
-	public string ActionWrapperClassName => $"{TypePrefix}{Constants.ActionWrapperClassSuffix}";
+	/// <summary>The generated action class name for this registration.</summary>
+	public string ActionWrapperClassName => $"{TypePrefix}{PluginStepTypeNames.ActionSuffix}";
 
-	/// <summary>
-	/// Gets a unique identifier for this registration.
-	/// Includes namespace and plugin class name to differentiate multiple registrations
-	/// for the same entity/operation/stage across different namespaces.
-	/// </summary>
-	public string UniqueId =>
-		$"{Namespace?.Replace(".", "_")}_{PluginClassName}_{EntityTypeName}_{EventOperation}_{ExecutionStage}";
+	/// <summary>The qualified prefix also distinguishes generated source files.</summary>
+	public string UniqueId => $"{Namespace}.{TypePrefix}";
 
 	public override bool Equals(object obj)
 	{

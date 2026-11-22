@@ -148,7 +148,7 @@ RegisterStep<Account, AccountService>(
 
 3. **Code Generation**: Generates wrapper classes in the **plugin's own namespace**, named after the registration:
    - Namespace: `{PluginNamespace}` (same namespace as the plugin class)
-   - Classes: `{PluginClass}{Entity}{Operation}{Stage}PreImage` / `...PostImage` / `...ActionWrapper` (the registration-derived prefix is sanitized into a valid identifier). Uniqueness within the namespace is guaranteed by XPC2002 (one registration per entity/operation/stage per plugin) plus distinct plugin class names — so no per-registration namespace or `using` alias is needed.
+   - Classes: `{PluginClass}_{Entity}_{Operation}_{Stage}PreImage` / `...PostImage` / `...StepAction`. Component boundaries are preserved with `_` separators; special characters in a component are encoded so custom operation names do not collapse to the same identifier. No per-registration namespace or `using` alias is needed.
 
 4. **Signature Validation**: The source generator validates that the handler method signature matches the registered images and emits compile-time diagnostics if there is a mismatch.
 
@@ -186,10 +186,10 @@ public class AccountPlugin : Plugin
 public class AccountService
 {
     // Handler signature MUST match registered images (enforced by source generator diagnostics).
-    // The image types are named after the registration: {PluginClass}{Entity}{Operation}{Stage}{Kind}.
+    // The image types are named after the registration: {PluginClass}_{Entity}_{Operation}_{Stage}{Kind}.
     public void HandleUpdate(
-        AccountPluginAccountUpdatePostOperationPreImage preImage,
-        AccountPluginAccountUpdatePostOperationPostImage postImage)
+        AccountPlugin_Account_Update_PostOperationPreImage preImage,
+        AccountPlugin_Account_Update_PostOperationPostImage postImage)
     {
         var previousName = preImage.Name;     // Type-safe, IntelliSense works
         var previousRevenue = preImage.Revenue;
@@ -205,12 +205,12 @@ registration. Each wrapper holds the strongly-typed entity and implements the sh
 (see [Image Interfaces](#image-interfaces) below):
 
 ```csharp
-// Generated in the plugin's namespace, named {PluginClass}{Entity}{Operation}{Stage}{Kind}
+// Generated in the plugin's namespace, named {PluginClass}_{Entity}_{Operation}_{Stage}{Kind}
 namespace YourNamespace
 {
-    public sealed class AccountPluginAccountUpdatePostOperationPreImage : IPluginPreImage<YourNamespace.Account>
+    public sealed class AccountPlugin_Account_Update_PostOperationPreImage : IPluginPreImage<YourNamespace.Account>
     {
-        public AccountPluginAccountUpdatePostOperationPreImage(Entity entity)
+        public AccountPlugin_Account_Update_PostOperationPreImage(Entity entity)
         {
             Entity = entity.ToEntity<YourNamespace.Account>();
         }
@@ -226,9 +226,9 @@ namespace YourNamespace
         public decimal? Revenue => Entity.Revenue;
     }
 
-    public sealed class AccountPluginAccountUpdatePostOperationPostImage : IPluginPostImage<YourNamespace.Account>
+    public sealed class AccountPlugin_Account_Update_PostOperationPostImage : IPluginPostImage<YourNamespace.Account>
     {
-        public AccountPluginAccountUpdatePostOperationPostImage(Entity entity)
+        public AccountPlugin_Account_Update_PostOperationPostImage(Entity entity)
         {
             Entity = entity.ToEntity<YourNamespace.Account>();
         }
@@ -273,8 +273,8 @@ public class AccountService
 {
     // Concrete generated types (preferred — full typed property access)
     public void HandleUpdate(
-        AccountPluginAccountUpdatePostOperationPreImage pre,
-        AccountPluginAccountUpdatePostOperationPostImage post) { }
+        AccountPlugin_Account_Update_PostOperationPreImage pre,
+        AccountPlugin_Account_Update_PostOperationPostImage post) { }
 }
 
 public static class AuditHelper

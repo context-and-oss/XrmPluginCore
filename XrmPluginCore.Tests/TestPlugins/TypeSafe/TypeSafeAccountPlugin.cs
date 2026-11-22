@@ -12,8 +12,8 @@ namespace XrmPluginCore.Tests.TestPlugins.TypeSafe;
 public class TypeSafeAccountPlugin : Plugin
 {
 	public bool UpdateExecuted { get; private set; }
-	public TypeSafeAccountPluginAccountUpdatePreOperationPreImage LastPreImage { get; private set; }
-	public TypeSafeAccountPluginAccountUpdatePreOperationPostImage LastPostImage { get; private set; }
+	public TypeSafeAccountPlugin_Account_Update_PreOperationPreImage LastPreImage { get; private set; }
+	public TypeSafeAccountPlugin_Account_Update_PreOperationPostImage LastPostImage { get; private set; }
 
 	public TypeSafeAccountPlugin()
 	{
@@ -31,7 +31,7 @@ public class TypeSafeAccountPlugin : Plugin
 		return base.OnBeforeBuildServiceProvider(services);
 	}
 
-	internal void SetExecutionResult(TypeSafeAccountPluginAccountUpdatePreOperationPreImage preImage, TypeSafeAccountPluginAccountUpdatePreOperationPostImage postImage)
+	internal void SetExecutionResult(TypeSafeAccountPlugin_Account_Update_PreOperationPreImage preImage, TypeSafeAccountPlugin_Account_Update_PreOperationPostImage postImage)
 	{
 		UpdateExecuted = true;
 		LastPreImage = preImage;

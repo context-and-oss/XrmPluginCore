@@ -1004,7 +1004,7 @@ public class DiagnosticReportingTests
 
 		// Verify PreImage class is generated
 		var generatedSource = result.GeneratedTrees.First().ToString();
-		generatedSource.Should().Contain("public sealed class TestPluginAccountUpdatePostOperationPreImage",
+		generatedSource.Should().Contain("public sealed class TestPlugin_Account_Update_PostOperationPreImage",
 			"PreImage class should be generated to allow developers to create the handler method with correct signature");
 	}
 
@@ -1064,7 +1064,7 @@ public class DiagnosticReportingTests
 
 		// Verify PreImage class is generated
 		var generatedSource = result.GeneratedTrees.First().ToString();
-		generatedSource.Should().Contain("public sealed class TestPluginAccountUpdatePostOperationPreImage",
+		generatedSource.Should().Contain("public sealed class TestPlugin_Account_Update_PostOperationPreImage",
 			"PreImage class should be generated to allow developers to create the handler method with correct signature");
 
 		generatedSource.Should().Contain("namespace TestNamespace",
@@ -1155,8 +1155,8 @@ public class DiagnosticReportingTests
 		var sourcesByHintName = result.GeneratedSources.ToDictionary(gs => gs.HintName, gs => gs.SourceText);
 
 		// Find the hint names for each namespace
-		var namespace1HintName = sourcesByHintName.Keys.Single(h => h.Contains("Namespace1_"));
-		var namespace2HintName = sourcesByHintName.Keys.Single(h => h.Contains("Namespace2_"));
+		var namespace1HintName = sourcesByHintName.Keys.Single(h => h.StartsWith("Namespace1.", StringComparison.Ordinal));
+		var namespace2HintName = sourcesByHintName.Keys.Single(h => h.StartsWith("Namespace2.", StringComparison.Ordinal));
 
 		// Verify Namespace1 source: correct namespace AND correct property (Name)
 		var namespace1Source = sourcesByHintName[namespace1HintName];

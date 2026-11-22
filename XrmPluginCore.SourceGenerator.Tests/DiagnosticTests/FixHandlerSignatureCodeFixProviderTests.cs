@@ -13,8 +13,8 @@ namespace XrmPluginCore.SourceGenerator.Tests.DiagnosticTests;
 /// </summary>
 public class FixHandlerSignatureCodeFixProviderTests : CodeFixTestBase
 {
-	private const string Pre = "TestNamespace.TestPluginAccountUpdatePostOperationPreImage";
-	private const string Post = "TestNamespace.TestPluginAccountUpdatePostOperationPostImage";
+	private const string Pre = "TestNamespace.TestPlugin_Account_Update_PostOperationPreImage";
+	private const string Post = "TestNamespace.TestPlugin_Account_Update_PostOperationPostImage";
 
 	[Fact]
 	public async Task Should_Fix_Signature_For_PreImage()
@@ -108,8 +108,8 @@ public class FixHandlerSignatureCodeFixProviderTests : CodeFixTestBase
 		var fixedSource = await ApplyFixAllAsync(source);
 
 		// Both handlers fixed on interface + implementation, each with its own registration-derived type.
-		CountOccurrences(fixedSource, "void HandleUpdate(TestNamespace.TestPluginAccountUpdatePostOperationPreImage preImage)").Should().Be(2);
-		CountOccurrences(fixedSource, "void HandleDelete(TestNamespace.TestPluginAccountDeletePostOperationPreImage preImage)").Should().Be(2);
+		CountOccurrences(fixedSource, "void HandleUpdate(TestNamespace.TestPlugin_Account_Update_PostOperationPreImage preImage)").Should().Be(2);
+		CountOccurrences(fixedSource, "void HandleDelete(TestNamespace.TestPlugin_Account_Delete_PostOperationPreImage preImage)").Should().Be(2);
 	}
 
 	private static string WrapPlugin(string registrationTail, string interfaceMethod, string implMethod) =>

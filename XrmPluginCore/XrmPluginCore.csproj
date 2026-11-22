@@ -10,6 +10,10 @@
 		<IsPackable>true</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\Shared\PluginStepTypeNames.cs" Link="Helpers\PluginStepTypeNames.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Folder Include="Properties\" />
   </ItemGroup>
   <ItemGroup>

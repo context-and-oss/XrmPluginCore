@@ -3,6 +3,8 @@ using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Text;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Composition;
 using System.Linq;
@@ -22,128 +24,122 @@ public class CreateHandlerMethodCodeFixProvider : CodeFixProvider
 	public sealed override ImmutableArray<string> FixableDiagnosticIds =>
 		ImmutableArray.Create(DiagnosticDescriptors.HandlerMethodNotFound.Id);
 
-	public sealed override FixAllProvider GetFixAllProvider() =>
-		WellKnownFixAllProviders.BatchFixer;
+	public sealed override FixAllProvider GetFixAllProvider() => CreateMethodsFixAllProvider.Instance;
 
-	public sealed override async Task RegisterCodeFixesAsync(CodeFixContext context)
+	public sealed override Task RegisterCodeFixesAsync(CodeFixContext context)
 	{
-		var root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
-		if (root == null)
-		{
-			return;
-		}
-
 		var diagnostic = context.Diagnostics.First();
-
-		// Get properties from diagnostic
-		if (!diagnostic.Properties.TryGetValue(Constants.PropertyServiceType, out var serviceType) ||
-			!diagnostic.Properties.TryGetValue(Constants.PropertyMethodName, out var methodName))
+		if (TryGetMethod(diagnostic, out var methodName, out var preImageType, out var postImageType))
 		{
-			return;
+			var signature = SyntaxFactoryHelper.BuildSignatureDescription(preImageType != null, postImageType != null);
+			context.RegisterCodeFix(
+				CodeAction.Create(
+					$"Create method '{methodName}({signature})'",
+					c => CreateMethodsAsync(context.Document.Project.Solution, ImmutableArray.Create(diagnostic), c),
+					nameof(CreateHandlerMethodCodeFixProvider)),
+				diagnostic);
 		}
-
-		diagnostic.Properties.TryGetValue(Constants.PropertyPreImageType, out var preImageType);
-		diagnostic.Properties.TryGetValue(Constants.PropertyPostImageType, out var postImageType);
-
-		// The analyzer reports HasPreImage/HasPostImage unconditionally but only supplies the generated
-		// wrapper type name when it can resolve it. If an image is registered but its type name is
-		// missing, we can't emit a correct signature — don't offer a fix that would create a
-		// permanently mismatched, param-less method.
-		diagnostic.Properties.TryGetValue(Constants.PropertyHasPreImage, out var expectsPreImageStr);
-		diagnostic.Properties.TryGetValue(Constants.PropertyHasPostImage, out var expectsPostImageStr);
-		var expectsPreImage = bool.TryParse(expectsPreImageStr, out var ep) && ep;
-		var expectsPostImage = bool.TryParse(expectsPostImageStr, out var eq) && eq;
-		if ((expectsPreImage && string.IsNullOrEmpty(preImageType)) ||
-			(expectsPostImage && string.IsNullOrEmpty(postImageType)))
-		{
-			return;
-		}
-
-		var hasPreImage = !string.IsNullOrEmpty(preImageType);
-		var hasPostImage = !string.IsNullOrEmpty(postImageType);
-
-		// Build the title showing expected signature
-		var signatureDescription = SyntaxFactoryHelper.BuildSignatureDescription(hasPreImage, hasPostImage);
-		var title = $"Create method '{methodName}({signatureDescription})'";
-
-		context.RegisterCodeFix(
-			CodeAction.Create(
-				title: title,
-				createChangedSolution: c => CreateMethodAsync(context.Document, diagnostic, methodName!, preImageType, postImageType, c),
-				equivalenceKey: nameof(CreateHandlerMethodCodeFixProvider)),
-			diagnostic);
+		return Task.CompletedTask;
 	}
 
-	private static async Task<Solution> CreateMethodAsync(
-		Document document,
-		Diagnostic diagnostic,
-		string methodName,
-		string preImageType,
-		string postImageType,
+	private static bool TryGetMethod(Diagnostic diagnostic, out string methodName, out string preImageType, out string postImageType)
+	{
+		diagnostic.Properties.TryGetValue(Constants.PropertyMethodName, out methodName);
+		diagnostic.Properties.TryGetValue(Constants.PropertyPreImageType, out preImageType);
+		diagnostic.Properties.TryGetValue(Constants.PropertyPostImageType, out postImageType);
+		diagnostic.Properties.TryGetValue(Constants.PropertyHasPreImage, out var hasPreImage);
+		diagnostic.Properties.TryGetValue(Constants.PropertyHasPostImage, out var hasPostImage);
+
+		// Do not create an incomplete signature when an expected image name could not be resolved.
+		return !string.IsNullOrEmpty(methodName) &&
+			(!(bool.TryParse(hasPreImage, out var pre) && pre) || !string.IsNullOrEmpty(preImageType)) &&
+			(!(bool.TryParse(hasPostImage, out var post) && post) || !string.IsNullOrEmpty(postImageType));
+	}
+
+	private static async Task<Solution> CreateMethodsAsync(
+		Solution solution,
+		ImmutableArray<Diagnostic> diagnostics,
 		CancellationToken cancellationToken)
 	{
-		var solution = document.Project.Solution;
-
-		var semanticModel = await document.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
-		if (semanticModel == null)
+		// Resolve against the original solution, then append all methods for each interface in one edit.
+		// BatchFixer would merge independent insertions at the same position and drop some methods.
+		var edits = new Dictionary<DocumentId, Dictionary<TextSpan, List<MethodDeclarationSyntax>>>();
+		foreach (var diagnostic in diagnostics)
 		{
-			return solution;
+			var tree = diagnostic.Location.SourceTree;
+			if (tree == null || !TryGetMethod(diagnostic, out var methodName, out var preImageType, out var postImageType))
+				continue;
+
+			var document = solution.GetDocument(tree);
+			if (document == null)
+				continue;
+
+			var semanticModel = await document.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
+			if (semanticModel == null)
+				continue;
+
+			var root = await tree.GetRootAsync(cancellationToken).ConfigureAwait(false);
+			var serviceType = RegisterStepHelper.ResolveServiceType(root, semanticModel, diagnostic.Location.SourceSpan, cancellationToken);
+			if (serviceType == null)
+				continue;
+
+			var declaration = await FindInterfaceDeclarationAsync(solution, serviceType, cancellationToken).ConfigureAwait(false);
+			if (declaration == null)
+				continue;
+
+			var target = solution.GetDocumentId(declaration.SyntaxTree);
+			if (!edits.TryGetValue(target, out var interfaces))
+				edits.Add(target, interfaces = new());
+			if (!interfaces.TryGetValue(declaration.Span, out var methods))
+				interfaces.Add(declaration.Span, methods = new());
+
+			var method = CreateMethodDeclaration(methodName, preImageType, postImageType);
+			if (!methods.Any(existing => existing.IsEquivalentTo(method)))
+				methods.Add(method);
 		}
 
-		var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
-		if (root == null)
+		foreach (var edit in edits)
 		{
-			return solution;
+			var root = await solution.GetDocument(edit.Key).GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
+			var declarations = edit.Value.Keys.Select(span => (InterfaceDeclarationSyntax)root.FindNode(span));
+			var newRoot = root.ReplaceNodes(declarations,
+				(original, rewritten) => rewritten.AddMembers(edit.Value[original.Span].ToArray()));
+			solution = solution.WithDocumentSyntaxRoot(edit.Key, newRoot);
 		}
 
-		var diagnosticNode = root.FindNode(diagnostic.Location.SourceSpan);
-		var registerStepInvocation = diagnosticNode.AncestorsAndSelf()
-			.OfType<InvocationExpressionSyntax>()
-			.FirstOrDefault(i => RegisterStepHelper.IsRegisterStepCall(i, out _));
+		return solution;
+	}
 
-		if (registerStepInvocation == null)
+	private sealed class CreateMethodsFixAllProvider : FixAllProvider
+	{
+		public static readonly CreateMethodsFixAllProvider Instance = new();
+
+		public override async Task<CodeAction> GetFixAsync(FixAllContext context)
 		{
-			return solution;
+			ImmutableArray<Diagnostic> diagnostics;
+			switch (context.Scope)
+			{
+				case FixAllScope.Document when context.Document != null:
+					diagnostics = await context.GetDocumentDiagnosticsAsync(context.Document).ConfigureAwait(false);
+					break;
+				case FixAllScope.Project:
+					diagnostics = await context.GetAllDiagnosticsAsync(context.Project).ConfigureAwait(false);
+					break;
+				case FixAllScope.Solution:
+					var all = ImmutableArray.CreateBuilder<Diagnostic>();
+					foreach (var project in context.Solution.Projects)
+						all.AddRange(await context.GetAllDiagnosticsAsync(project).ConfigureAwait(false));
+					diagnostics = all.ToImmutable();
+					break;
+				default:
+					return null;
+			}
+
+			return diagnostics.IsEmpty ? null : CodeAction.Create(
+				"Create all missing image handlers",
+				c => CreateMethodsAsync(context.Solution, diagnostics, c),
+				context.CodeActionEquivalenceKey);
 		}
-
-		var genericName = RegisterStepHelper.GetGenericName(registerStepInvocation);
-		if (genericName == null || genericName.TypeArgumentList.Arguments.Count < 2)
-		{
-			return solution;
-		}
-
-		var serviceTypeSyntax = genericName.TypeArgumentList.Arguments[1];
-		var typeInfo = semanticModel.GetTypeInfo(serviceTypeSyntax, cancellationToken);
-		if (typeInfo.Type is not INamedTypeSymbol serviceTypeSymbol)
-		{
-			return solution;
-		}
-
-		var interfaceDeclaration = await FindInterfaceDeclarationAsync(solution, serviceTypeSymbol, cancellationToken);
-		if (interfaceDeclaration == null)
-		{
-			return solution;
-		}
-
-		var interfaceDocument = solution.GetDocument(interfaceDeclaration.SyntaxTree);
-		if (interfaceDocument == null)
-		{
-			return solution;
-		}
-
-		var interfaceRoot = await interfaceDocument.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
-		if (interfaceRoot == null)
-		{
-			return solution;
-		}
-
-		var methodDeclaration = CreateMethodDeclaration(methodName, preImageType, postImageType);
-
-		// The generated wrapper types are referenced by fully-qualified name, so the method can be added
-		// directly with no using-directive juggling.
-		var newRoot = interfaceRoot.ReplaceNode(interfaceDeclaration, interfaceDeclaration.AddMembers(methodDeclaration));
-
-		return solution.WithDocumentSyntaxRoot(interfaceDocument.Id, newRoot);
 	}
 
 	internal static MethodDeclarationSyntax CreateMethodDeclaration(string methodName, string preImageType, string postImageType)

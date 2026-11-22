@@ -13,8 +13,8 @@ namespace XrmPluginCore.SourceGenerator.Tests.DiagnosticTests;
 /// </summary>
 public class CreateHandlerMethodCodeFixProviderTests : CodeFixTestBase
 {
-	private const string Pre = "TestNamespace.TestPluginAccountUpdatePostOperationPreImage";
-	private const string Post = "TestNamespace.TestPluginAccountUpdatePostOperationPostImage";
+	private const string Pre = "TestNamespace.TestPlugin_Account_Update_PostOperationPreImage";
+	private const string Post = "TestNamespace.TestPlugin_Account_Update_PostOperationPostImage";
 
 	[Fact]
 	public async Task Should_Create_Method_For_PreImage()
@@ -57,10 +57,12 @@ public class CreateHandlerMethodCodeFixProviderTests : CodeFixTestBase
 		fixedSource.Should().NotContain("using TestNamespace.PluginRegistrations");
 	}
 
-	[Fact]
-	public async Task FixAll_Should_Create_Methods_Across_Services()
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public async Task FixAll_Should_Create_Both_Methods_Even_On_The_Same_Service(bool sameService)
 	{
-		// Two registrations, each on its own service, both missing their handler method.
+		// Both registrations are missing their handler. Fix All may need to append both to one interface.
 		const string source = """
 			using System;
 			using Microsoft.Xrm.Sdk;
@@ -96,10 +98,15 @@ public class CreateHandlerMethodCodeFixProviderTests : CodeFixTestBase
 			}
 			""";
 
-		var fixedSource = await ApplyFixAllAsync(source);
+		var fixedSource = await ApplyFixAllAsync(sameService
+			? source.Replace("RegisterStep<Account, IDeleteService>", "RegisterStep<Account, IUpdateService>")
+			: source);
 
-		fixedSource.Should().Contain("void HandleUpdate(TestNamespace.TestPluginAccountUpdatePostOperationPreImage preImage)");
-		fixedSource.Should().Contain("void HandleDelete(TestNamespace.TestPluginAccountDeletePostOperationPreImage preImage)");
+		fixedSource.Should().Contain("void HandleUpdate(TestNamespace.TestPlugin_Account_Update_PostOperationPreImage preImage)");
+		fixedSource.Should().Contain("void HandleDelete(TestNamespace.TestPlugin_Account_Delete_PostOperationPreImage preImage)");
+		var result = CompilationHelper.CreateCompilation(fixedSource);
+		var target = result.GetTypeByMetadataName(sameService ? "TestNamespace.IUpdateService" : "TestNamespace.IDeleteService");
+		target!.GetMembers("HandleDelete").Should().ContainSingle();
 	}
 
 	[Fact]

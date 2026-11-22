@@ -10,7 +10,7 @@ public class TypeSafeAccountService(TypeSafeAccountPlugin plugin)
 {
 	private readonly TypeSafeAccountPlugin plugin = plugin ?? throw new ArgumentNullException(nameof(plugin));
 
-	public void HandleUpdate(TypeSafeAccountPluginAccountUpdatePreOperationPreImage preImage, TypeSafeAccountPluginAccountUpdatePreOperationPostImage postImage)
+	public void HandleUpdate(TypeSafeAccountPlugin_Account_Update_PreOperationPreImage preImage, TypeSafeAccountPlugin_Account_Update_PreOperationPostImage postImage)
 	{
 		if (preImage != null)
 		{

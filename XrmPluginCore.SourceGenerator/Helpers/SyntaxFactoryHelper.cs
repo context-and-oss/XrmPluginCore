@@ -30,7 +30,7 @@ internal static class SyntaxFactoryHelper
 
 	/// <summary>
 	/// Creates a parameter list for the generated image wrappers. Each parameter is typed with the
-	/// fully-qualified generated wrapper type (e.g. <c>MyNs.AccountPluginAccountUpdatePostOperationPreImage</c>),
+	/// fully-qualified generated wrapper type (e.g. <c>MyNs.AccountPlugin_Account_Update_PostOperationPreImage</c>),
 	/// so no using directive is required at the handler's declaration site. A null type name omits that
 	/// parameter.
 	/// </summary>

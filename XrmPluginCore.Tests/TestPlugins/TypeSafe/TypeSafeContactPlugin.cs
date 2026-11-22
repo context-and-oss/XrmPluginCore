@@ -12,7 +12,7 @@ namespace XrmPluginCore.Tests.TestPlugins.TypeSafe;
 public class TypeSafeContactPlugin : Plugin
 {
 	public bool CreateExecuted { get; private set; }
-	public TypeSafeContactPluginContactCreatePostOperationPreImage LastPreImage { get; private set; }
+	public TypeSafeContactPlugin_Contact_Create_PostOperationPreImage LastPreImage { get; private set; }
 
 	public TypeSafeContactPlugin()
 	{
@@ -29,7 +29,7 @@ public class TypeSafeContactPlugin : Plugin
 		return base.OnBeforeBuildServiceProvider(services);
 	}
 
-	internal void SetExecutionResult(TypeSafeContactPluginContactCreatePostOperationPreImage preImage)
+	internal void SetExecutionResult(TypeSafeContactPlugin_Contact_Create_PostOperationPreImage preImage)
 	{
 		CreateExecuted = true;
 		LastPreImage = preImage;

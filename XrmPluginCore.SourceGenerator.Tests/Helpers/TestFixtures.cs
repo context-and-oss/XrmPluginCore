@@ -60,12 +60,12 @@ namespace TestNamespace
 
     public interface ITestService
     {{
-        void HandleAccountUpdate(TestPlugin{entityClass}UpdatePostOperationPreImage preImage);
+        void HandleAccountUpdate(TestPlugin_{entityClass}_Update_PostOperationPreImage preImage);
     }}
 
     public class TestService : ITestService
     {{
-        public void HandleAccountUpdate(TestPlugin{entityClass}UpdatePostOperationPreImage preImage) {{ }}
+        public void HandleAccountUpdate(TestPlugin_{entityClass}_Update_PostOperationPreImage preImage) {{ }}
     }}
 }}";
 	}
@@ -101,12 +101,12 @@ namespace TestNamespace
 
 		    public interface ITestService
 		    {
-		        void HandleAccountUpdate(TestPluginAccountUpdatePostOperationPostImage postImage);
+		        void HandleAccountUpdate(TestPlugin_Account_Update_PostOperationPostImage postImage);
 		    }
 
 		    public class TestService : ITestService
 		    {
-		        public void HandleAccountUpdate(TestPluginAccountUpdatePostOperationPostImage postImage) { }
+		        public void HandleAccountUpdate(TestPlugin_Account_Update_PostOperationPostImage postImage) { }
 		    }
 		}
 		""";
@@ -143,12 +143,12 @@ namespace TestNamespace
 
 		    public interface ITestService
 		    {
-		        void HandleAccountUpdate(TestPluginAccountUpdatePostOperationPreImage preImage, TestPluginAccountUpdatePostOperationPostImage postImage);
+		        void HandleAccountUpdate(TestPlugin_Account_Update_PostOperationPreImage preImage, TestPlugin_Account_Update_PostOperationPostImage postImage);
 		    }
 
 		    public class TestService : ITestService
 		    {
-		        public void HandleAccountUpdate(TestPluginAccountUpdatePostOperationPreImage preImage, TestPluginAccountUpdatePostOperationPostImage postImage) { }
+		        public void HandleAccountUpdate(TestPlugin_Account_Update_PostOperationPreImage preImage, TestPlugin_Account_Update_PostOperationPostImage postImage) { }
 		    }
 		}
 		""";
@@ -225,12 +225,12 @@ namespace TestNamespace
 
 		    public interface ITestService
 		    {
-		        void HandleAccountUpdate(TestPluginAccountUpdatePostOperationPreImage preImage);
+		        void HandleAccountUpdate(TestPlugin_Account_Update_PostOperationPreImage preImage);
 		    }
 
 		    public class TestService : ITestService
 		    {
-		        public void HandleAccountUpdate(TestPluginAccountUpdatePostOperationPreImage preImage) { }
+		        public void HandleAccountUpdate(TestPlugin_Account_Update_PostOperationPreImage preImage) { }
 		    }
 		}
 		""";
@@ -266,12 +266,12 @@ namespace TestNamespace
 
 		    public interface ITestService
 		    {
-		        void HandleAccountUpdate(TestPluginAccountUpdatePostOperationPostImage postImage);
+		        void HandleAccountUpdate(TestPlugin_Account_Update_PostOperationPostImage postImage);
 		    }
 
 		    public class TestService : ITestService
 		    {
-		        public void HandleAccountUpdate(TestPluginAccountUpdatePostOperationPostImage postImage) { }
+		        public void HandleAccountUpdate(TestPlugin_Account_Update_PostOperationPostImage postImage) { }
 		    }
 		}
 		""";
@@ -309,12 +309,12 @@ namespace TestNamespace
 
 		    public interface ITestService
 		    {
-		        void HandleAccountUpdate(TestPluginAccountUpdatePostOperationPreImage preImage);
+		        void HandleAccountUpdate(TestPlugin_Account_Update_PostOperationPreImage preImage);
 		    }
 
 		    public class TestService : ITestService
 		    {
-		        public void HandleAccountUpdate(TestPluginAccountUpdatePostOperationPreImage preImage)
+		        public void HandleAccountUpdate(TestPlugin_Account_Update_PostOperationPreImage preImage)
 		        {
 		            // Only touches a non-deprecated member.
 		            var name = preImage.Name;
@@ -355,12 +355,12 @@ namespace TestNamespace
 
 		    public interface ITestService
 		    {
-		        void HandleAccountUpdate(TestPluginAccountUpdatePostOperationPreImage preImage);
+		        void HandleAccountUpdate(TestPlugin_Account_Update_PostOperationPreImage preImage);
 		    }
 
 		    public class TestService : ITestService
 		    {
-		        public void HandleAccountUpdate(TestPluginAccountUpdatePostOperationPreImage preImage)
+		        public void HandleAccountUpdate(TestPlugin_Account_Update_PostOperationPreImage preImage)
 		        {
 		            // Accessing the deprecated member here SHOULD raise CS0612 in this calling code.
 		            var legacy = preImage.ctx_DeprecatedField;

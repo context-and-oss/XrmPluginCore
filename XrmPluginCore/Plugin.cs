@@ -332,12 +332,9 @@ public abstract class Plugin : IPlugin, IPluginDefinition, ICustomApiDefinition
 	{
 		var builder = new PluginStepConfigBuilder<TEntity>(eventOperation, executionStage);
 
-		// Compute the generated ActionWrapper type name up front. Must match what the source generator
-		// emits: a registration-derived, sanitized type prefix in the plugin's own namespace, i.e.
-		// {Namespace}.{Sanitize(PluginClass + Entity + Operation + Stage)}ActionWrapper.
-		var wrapperTypeName =
-			$"{ChildClassNamespace}." +
-			$"{IdentifierSanitizer.Sanitize($"{ChildClassShortName}{typeof(TEntity).Name}{eventOperation}{executionStage}")}ActionWrapper";
+		// The generator uses the same naming helper for the emitted step action.
+		var prefix = Internal.PluginStepTypeNames.Prefix(ChildClassShortName, typeof(TEntity).Name, eventOperation, executionStage.ToString());
+		var wrapperTypeName = $"{ChildClassNamespace}.{prefix}{Internal.PluginStepTypeNames.ActionSuffix}";
 
 		var registration = new PluginStepRegistration(
 			pluginStepConfig: builder,

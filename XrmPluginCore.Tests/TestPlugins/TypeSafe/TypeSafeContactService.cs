@@ -15,7 +15,7 @@ public class TypeSafeContactService
 		this.plugin = plugin ?? throw new ArgumentNullException(nameof(plugin));
 	}
 
-	public void HandleCreate(TypeSafeContactPluginContactCreatePostOperationPreImage preImage)
+	public void HandleCreate(TypeSafeContactPlugin_Contact_Create_PostOperationPreImage preImage)
 	{
 		if (preImage != null)
 		{

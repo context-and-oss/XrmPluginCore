@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net462;net8</TargetFrameworks>
+    <TargetFrameworks>net462;net48;net10.0</TargetFrameworks>
     <UseDataverseSdk>true</UseDataverseSdk>
     <PackageId>XrmPluginCore</PackageId>
     <Title>XrmPluginCore</Title>

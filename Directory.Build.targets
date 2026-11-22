@@ -21,7 +21,7 @@
   <!-- This is in .targets (not .props) because it must evaluate AFTER project files set IsPackable=true -->
   <PropertyGroup Condition="'$(IsPackable)' != 'false'">
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <PackageProjectUrl>https://github.com/delegateas/XrmPluginCore</PackageProjectUrl>
+    <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>

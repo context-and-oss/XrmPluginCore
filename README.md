@@ -16,6 +16,10 @@ XrmPluginCore provides base functionality for developing plugins and custom APIs
 - **Type-Safe Custom APIs**: Generated request/response classes for Custom APIs via source generators
 - **Compatibility**: Supports .NET Framework 4.6.2 and .NET 8
 
+## Debugging NuGet packages
+
+XrmPluginCore and XrmPluginCore.Abstractions ship Source Link-enabled symbols. To step into the exact source used to build a package, enable Source Link and the NuGet.org symbol server in your debugger. The source generator bundled with XrmPluginCore carries its symbols in the analyzer DLL.
+
 ## Usage
 
 ### Creating a Plugin

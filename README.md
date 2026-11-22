@@ -101,7 +101,6 @@ XrmPluginCore includes a source generator that creates type-safe wrapper classes
 ```csharp
 using XrmPluginCore;
 using XrmPluginCore.Enums;
-using MyPlugin.PluginRegistrations.AccountUpdatePlugin.AccountUpdatePostOperation;
 
 namespace MyPlugin {
     public class AccountUpdatePlugin : Plugin {
@@ -110,7 +109,7 @@ namespace MyPlugin {
             RegisterStep<Account, IAccountService>(
 				EventOperation.Update,
 				ExecutionStage.PostOperation,
-				service => service.Process)
+				nameof(IAccountService.Process))
                 .AddFilteredAttributes(x => x.Name, x => x.AccountNumber)
                 .WithPreImage(x => x.Name, x => x.Revenue);
                 // Source generator validates that Process accepts PreImage parameter
@@ -118,11 +117,11 @@ namespace MyPlugin {
     }
 
     public interface IAccountService {
-        void Process(PreImage preImage);
+        void Process(AccountUpdatePlugin_Account_Update_PostOperationPreImage preImage);
     }
 
     public class AccountService : IAccountService {
-        public void Process(PreImage preImage) {
+        public void Process(AccountUpdatePlugin_Account_Update_PostOperationPreImage preImage) {
             // Type-safe access to pre-image attributes!
             var oldName = preImage.Name;        // IntelliSense works!
             var oldRevenue = preImage.Revenue;  // Type-safe Money access
@@ -135,19 +134,19 @@ namespace MyPlugin {
 - **Compile-time enforcement** - Source generator diagnostics ensure handler signature matches registered images
 - **IntelliSense support** - Auto-completion for available attributes
 - **Null safety** - Proper handling of missing attributes
-- **No boilerplate** - Just add a `using` statement for the generated namespace
+- **No boilerplate** - The image types are generated in the plugin namespace
 
 #### Working with Both Images
 
 ```csharp
-using MyPlugin.PluginRegistrations.AccountUpdatePlugin.AccountUpdatePostOperation;
+namespace MyPlugin;
 
 public class AccountUpdatePlugin : Plugin {
     public AccountUpdatePlugin() {
         RegisterStep<Account, IAccountService>(
 				EventOperation.Update,
 				ExecutionStage.PostOperation,
-				service => service.Process)
+				nameof(IAccountService.Process))
             .AddFilteredAttributes(x => x.Name, x => x.AccountNumber)
             .WithPreImage(x => x.Name, x => x.Revenue)
             .WithPostImage(x => x.Name, x => x.AccountNumber);
@@ -156,20 +155,16 @@ public class AccountUpdatePlugin : Plugin {
 }
 
 public class AccountService : IAccountService {
-    public void Process(PreImage preImage, PostImage postImage) {
+    public void Process(
+        AccountUpdatePlugin_Account_Update_PostOperationPreImage preImage,
+        AccountUpdatePlugin_Account_Update_PostOperationPostImage postImage) {
         var oldRevenue = preImage.Revenue;    // Type-safe pre-image access
-        var newAccountNum = postImage.Accountnumber;  // Type-safe post-image access
+        var newAccountNum = postImage.AccountNumber;  // Type-safe post-image access
     }
 }
 ```
 
-**Generated Namespace Convention:**
-```
-{YourNamespace}.PluginRegistrations.{PluginClassName}.{Entity}{Operation}{Stage}
-```
-Example: `MyPlugin.PluginRegistrations.AccountUpdatePlugin.AccountUpdatePostOperation`
-
-Inside this namespace you'll find simple class names: `PreImage`, `PostImage`, and `ActionWrapper`
+**Generated naming convention:** `{PluginNamespace}.{PluginClass}_{Entity}_{Operation}_{Stage}PreImage` (or `PostImage`). For example, `MyPlugin.AccountUpdatePlugin_Account_Update_PostOperationPreImage`. Special characters in individual components are encoded so they cannot be confused with separators.
 
 #### XML Documentation (Optional)
 

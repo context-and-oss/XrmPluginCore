@@ -1,6 +1,7 @@
 using Microsoft.CodeAnalysis;
 using System.Collections.Generic;
 using System.Linq;
+using XrmPluginCore.Internal;
 
 namespace XrmPluginCore.SourceGenerator.Models;
 
@@ -45,20 +46,18 @@ internal sealed class PluginStepMetadata
 	/// </summary>
 	public List<DiagnosticInfo> Diagnostics { get; set; } = [];
 
-	/// <summary>
-	/// Gets the namespace for generated wrapper classes.
-	/// Format: {OriginalNamespace}.PluginRegistrations.{PluginClassName}.{Entity}{Op}{Stage}
-	/// </summary>
-	public string RegistrationNamespace =>
-		$"{Namespace}.PluginRegistrations.{PluginClassName}.{EntityTypeName}{EventOperation}{ExecutionStage}";
+	/// <summary>The registration-derived prefix shared by image types and the step action.</summary>
+	public string TypePrefix =>
+		PluginStepTypeNames.Prefix(PluginClassName, EntityTypeName, EventOperation, ExecutionStage);
 
-	/// <summary>
-	/// Gets a unique identifier for this registration.
-	/// Includes namespace and plugin class name to differentiate multiple registrations
-	/// for the same entity/operation/stage across different namespaces.
-	/// </summary>
-	public string UniqueId =>
-		$"{Namespace?.Replace(".", "_")}_{PluginClassName}_{EntityTypeName}_{EventOperation}_{ExecutionStage}";
+	/// <summary>The generated wrapper class name for the given image type (e.g. "...PreImage").</summary>
+	public string ImageClassName(string imageType) => $"{TypePrefix}{imageType}";
+
+	/// <summary>The generated action class name for this registration.</summary>
+	public string ActionWrapperClassName => $"{TypePrefix}{PluginStepTypeNames.ActionSuffix}";
+
+	/// <summary>The qualified prefix also distinguishes generated source files.</summary>
+	public string UniqueId => $"{Namespace}.{TypePrefix}";
 
 	public override bool Equals(object obj)
 	{
@@ -176,12 +175,6 @@ internal sealed class ImageMetadata
 	public string ImageType { get; set; } // "PreImage" or "PostImage"
 	public string ImageName { get; set; }
 	public List<AttributeMetadata> Attributes { get; set; } = [];
-
-	/// <summary>
-	/// Gets the generated wrapper class name for this image.
-	/// Simply "PreImage" or "PostImage" - namespace provides isolation.
-	/// </summary>
-	public string WrapperClassName => ImageType;
 
 	public override bool Equals(object obj)
 	{

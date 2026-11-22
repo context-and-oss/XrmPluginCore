@@ -83,12 +83,21 @@ public class HandlerMethodNotFoundAnalyzer : DiagnosticAnalyzer
 		properties.Add(Constants.PropertyHasPreImage, hasPreImage.ToString());
 		properties.Add(Constants.PropertyHasPostImage, hasPostImage.ToString());
 
-		if (hasPreImage || hasPostImage)
+		if (hasPreImage)
 		{
-			var imageNamespace = RegisterStepHelper.GetExpectedImageNamespace(invocation, genericName, context.SemanticModel);
-			if (imageNamespace != null)
+			var preImageTypeName = RegisterStepHelper.GetExpectedImageTypeName(invocation, genericName, context.SemanticModel, Constants.PreImageTypeName);
+			if (preImageTypeName != null)
 			{
-				properties.Add(Constants.PropertyImageNamespace, imageNamespace);
+				properties.Add(Constants.PropertyPreImageType, preImageTypeName);
+			}
+		}
+
+		if (hasPostImage)
+		{
+			var postImageTypeName = RegisterStepHelper.GetExpectedImageTypeName(invocation, genericName, context.SemanticModel, Constants.PostImageTypeName);
+			if (postImageTypeName != null)
+			{
+				properties.Add(Constants.PropertyPostImageType, postImageTypeName);
 			}
 		}
 

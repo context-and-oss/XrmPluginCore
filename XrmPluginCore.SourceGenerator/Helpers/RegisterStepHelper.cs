@@ -4,6 +4,8 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 using System.Linq;
 using System.Threading;
+using XrmPluginCore.Internal;
+using XrmPluginCore.SourceGenerator.Parsers;
 
 namespace XrmPluginCore.SourceGenerator.Helpers;
 
@@ -13,13 +15,17 @@ namespace XrmPluginCore.SourceGenerator.Helpers;
 internal static class RegisterStepHelper
 {
 	/// <summary>
-	/// Computes the expected generated wrapper namespace for a RegisterStep invocation.
-	/// Returns: {PluginNamespace}.PluginRegistrations.{PluginClassName}.{EntityTypeName}{Operation}{Stage}
+	/// Computes the fully-qualified name of a generated image wrapper type for a RegisterStep invocation,
+	/// e.g. <c>{PluginNamespace}.{RegistrationPrefix}{imageTypeSuffix}</c> where
+	/// <paramref name="imageTypeSuffix"/> is "PreImage" or "PostImage". Must stay in sync with the
+	/// generator (<see cref="Models.PluginStepMetadata"/>) and the runtime discovery in
+	/// <c>Plugin.RegisterStep</c>. Returns null when the registration tuple can't be resolved.
 	/// </summary>
-	public static string GetExpectedImageNamespace(
+	public static string GetExpectedImageTypeName(
 		InvocationExpressionSyntax invocation,
 		GenericNameSyntax genericName,
-		SemanticModel semanticModel)
+		SemanticModel semanticModel,
+		string imageTypeSuffix)
 	{
 		var pluginClass = invocation.Ancestors().OfType<ClassDeclarationSyntax>().FirstOrDefault();
 		if (pluginClass == null)
@@ -27,11 +33,9 @@ internal static class RegisterStepHelper
 			return null;
 		}
 
-		var pluginClassName = pluginClass.Identifier.Text;
-		var pluginNamespace = GetNamespace(pluginClass);
+		var pluginNamespace = pluginClass.GetNamespace();
 
-		var entityTypeSyntax = genericName.TypeArgumentList.Arguments[0];
-		var entityTypeInfo = semanticModel.GetTypeInfo(entityTypeSyntax);
+		var entityTypeInfo = semanticModel.GetTypeInfo(genericName.TypeArgumentList.Arguments[0]);
 		var entityTypeName = entityTypeInfo.Type?.Name ?? "Unknown";
 
 		var (operationExpr, stageExpr) = GetOperationAndStageArguments(invocation, semanticModel);
@@ -43,7 +47,8 @@ internal static class RegisterStepHelper
 		var operation = ExtractEnumValue(operationExpr);
 		var stage = ExtractEnumValue(stageExpr);
 
-		return $"{pluginNamespace}.PluginRegistrations.{pluginClassName}.{entityTypeName}{operation}{stage}";
+		var prefix = PluginStepTypeNames.Prefix(pluginClass.Identifier.ValueText, entityTypeName, operation, stage);
+		return $"{pluginNamespace}.{prefix}{imageTypeSuffix}";
 	}
 
 	/// <summary>
@@ -59,29 +64,6 @@ internal static class RegisterStepHelper
 		var operation = bound.TryGetValue(Constants.ParameterEventOperation, out var op) ? op : null;
 		var stage = bound.TryGetValue(Constants.ParameterExecutionStage, out var st) ? st : null;
 		return (operation, stage);
-	}
-
-	/// <summary>
-	/// Extracts the namespace from a syntax node by walking up the tree.
-	/// </summary>
-	public static string GetNamespace(SyntaxNode node)
-	{
-		while (node != null)
-		{
-			if (node is NamespaceDeclarationSyntax namespaceDecl)
-			{
-				return namespaceDecl.Name.ToString();
-			}
-
-			if (node is FileScopedNamespaceDeclarationSyntax fileScopedNs)
-			{
-				return fileScopedNs.Name.ToString();
-			}
-
-			node = node.Parent;
-		}
-
-		return string.Empty;
 	}
 
 	/// <summary>

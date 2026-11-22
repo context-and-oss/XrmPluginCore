@@ -93,7 +93,7 @@ internal static class RegistrationParser
 			EntityTypeName = entityType.Name,
 			EntityTypeFullName = entityType.ToDisplayString(),
 			Namespace = classDeclaration.GetNamespace(),
-			PluginClassName = classDeclaration.Identifier.Text,
+			PluginClassName = classDeclaration.Identifier.ValueText,
 			NullableAnnotationsEnabled = nullableEnabled
 		};
 

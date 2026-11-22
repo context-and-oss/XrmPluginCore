@@ -46,7 +46,8 @@ public abstract class CodeFixTestBase
 		CodeFixProvider codeFixProvider,
 		params string[] diagnosticIds)
 	{
-		var compilation = CompilationHelper.CreateCompilation(source);
+		var document = CreateDocument(source);
+		var compilation = (await document.Project.GetCompilationAsync())!;
 
 		var compilationWithAnalyzers = compilation.WithAnalyzers(
 			[analyzer]);
@@ -59,7 +60,6 @@ public abstract class CodeFixTestBase
 			return source;
 		}
 
-		var document = CreateDocument(source);
 		var actions = new List<CodeAction>();
 
 		var context = new CodeFixContext(

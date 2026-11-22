@@ -12,6 +12,45 @@ public partial class WrapperClassGenerationTests
 	private const string ContextNamespace = "XrmPluginCore.Tests.Context.BusinessDomain";
 
 	[Fact]
+	public void Should_Compile_Steps_Whose_Concatenated_Names_Would_Collide()
+	{
+		const string source = """
+			using Microsoft.Xrm.Sdk;
+			using XrmPluginCore;
+			using XrmPluginCore.Enums;
+			namespace TestNamespace;
+
+			public class BC : Entity { }
+			public class C : Entity { }
+			public interface IService { void Handle(); }
+
+			public class A : Plugin
+			{
+			    public A()
+			    {
+			        RegisterStep<BC, IService>(EventOperation.Update, ExecutionStage.PostOperation, nameof(IService.Handle));
+			        RegisterStep<BC, IService>("test-op", ExecutionStage.PostOperation, nameof(IService.Handle));
+			        RegisterStep<BC, IService>("test_op", ExecutionStage.PostOperation, nameof(IService.Handle));
+			    }
+			}
+
+			public class AB : Plugin
+			{
+			    public AB() => RegisterStep<C, IService>(EventOperation.Update, ExecutionStage.PostOperation, nameof(IService.Handle));
+			}
+			""";
+
+		var result = GeneratorTestHelper.RunGeneratorAndCompile(source);
+
+		result.Success.Should().BeTrue(string.Join("; ", result.Errors ?? []));
+		var compilation = result.GeneratorResult.OutputCompilation;
+		compilation.GetTypeByMetadataName("TestNamespace.A_BC_Update_PostOperationStepAction").Should().NotBeNull();
+		compilation.GetTypeByMetadataName("TestNamespace.AB_C_Update_PostOperationStepAction").Should().NotBeNull();
+		compilation.GetTypeByMetadataName("TestNamespace.A_BC_testZ002Dop_PostOperationStepAction").Should().NotBeNull();
+		compilation.GetTypeByMetadataName("TestNamespace.A_BC_testZ005Fop_PostOperationStepAction").Should().NotBeNull();
+	}
+
+	[Fact]
 	public void Should_Generate_PreImage_Class_With_Properties()
 	{
 		// Arrange
@@ -27,13 +66,13 @@ public partial class WrapperClassGenerationTests
 		var generatedSource = result.GeneratedTrees[0].GetText().ToString();
 
 		// Verify class structure
-		generatedSource.Should().Contain($"public sealed class PreImage : IPluginPreImage<{ContextNamespace}.Account>");
+		generatedSource.Should().Contain($"public sealed class TestPlugin_Account_Update_PostOperationPreImage : IPluginPreImage<{ContextNamespace}.Account>");
 		generatedSource.Should().Contain($"public {ContextNamespace}.Account Entity {{ get; }}");
-		generatedSource.Should().Contain("public PreImage(Entity entity)");
+		generatedSource.Should().Contain("public TestPlugin_Account_Update_PostOperationPreImage(Entity entity)");
 		generatedSource.Should().Contain($"Entity = entity.ToEntity<{ContextNamespace}.Account>();");
 
 		// Verify NO PostImage class is generated
-		generatedSource.Should().NotContain("public sealed class PostImage");
+		generatedSource.Should().NotContain("class TestPlugin_Account_Update_PostOperationPostImage");
 
 		// Verify NO PostEntityImages retrieval
 		generatedSource.Should().NotContain("PostEntityImages");
@@ -55,9 +94,9 @@ public partial class WrapperClassGenerationTests
 		var generatedSource = result.GeneratedTrees[0].GetText().ToString();
 
 		// Verify class structure
-		generatedSource.Should().Contain($"public sealed class PostImage : IPluginPostImage<{ContextNamespace}.Account>");
+		generatedSource.Should().Contain($"public sealed class TestPlugin_Account_Update_PostOperationPostImage : IPluginPostImage<{ContextNamespace}.Account>");
 		generatedSource.Should().Contain($"public {ContextNamespace}.Account Entity {{ get; }}");
-		generatedSource.Should().Contain("public PostImage(Entity entity)");
+		generatedSource.Should().Contain("public TestPlugin_Account_Update_PostOperationPostImage(Entity entity)");
 		generatedSource.Should().Contain($"Entity = entity.ToEntity<{ContextNamespace}.Account>();");
 
 		// Verify properties forward to Entity
@@ -66,7 +105,7 @@ public partial class WrapperClassGenerationTests
 		HasAccountNumberSummary().Matches(generatedSource).Count.Should().Be(1, $"AccountNumber property should have correct XML summary. Generated source:\n{generatedSource}");
 
 		// Verify NO PreImage class is generated
-		generatedSource.Should().NotContain("public sealed class PreImage");
+		generatedSource.Should().NotContain("class TestPlugin_Account_Update_PostOperationPreImage");
 
 		// Verify NO PreEntityImages retrieval
 		generatedSource.Should().NotContain("PreEntityImages");
@@ -93,9 +132,9 @@ public partial class WrapperClassGenerationTests
 		namespaceCount.Should().Be(1, "all classes should be in the same namespace");
 
 		// All classes should exist
-		generatedSource.Should().Contain($"public sealed class PreImage : IPluginPreImage<{ContextNamespace}.Account>");
-		generatedSource.Should().Contain($"public sealed class PostImage : IPluginPostImage<{ContextNamespace}.Account>");
-		generatedSource.Should().Contain("internal sealed class ActionWrapper : IActionWrapper");
+		generatedSource.Should().Contain($"public sealed class TestPlugin_Account_Update_PostOperationPreImage : IPluginPreImage<{ContextNamespace}.Account>");
+		generatedSource.Should().Contain($"public sealed class TestPlugin_Account_Update_PostOperationPostImage : IPluginPostImage<{ContextNamespace}.Account>");
+		generatedSource.Should().Contain("internal sealed class TestPlugin_Account_Update_PostOperationStepAction : IActionWrapper");
 	}
 
 	[Theory]
@@ -166,7 +205,7 @@ public partial class WrapperClassGenerationTests
 		var generatedSource = result.GeneratedTrees[0].GetText().ToString();
 
 		// Verify ActionWrapper class structure (now implements IActionWrapper interface)
-		generatedSource.Should().Contain("internal sealed class ActionWrapper : IActionWrapper");
+		generatedSource.Should().Contain("internal sealed class TestPlugin_Account_Update_PostOperationStepAction : IActionWrapper");
 		generatedSource.Should().Contain("public Action<IExtendedServiceProvider> CreateAction()");
 		generatedSource.Should().Contain("var service = serviceProvider.GetRequiredService<TestNamespace.ITestService>();");
 
@@ -194,7 +233,7 @@ public partial class WrapperClassGenerationTests
 
 		// Verify PreImage handling (now inline instead of using PluginImageHelper)
 		generatedSource.Should().Contain("var preImageEntity = context?.PreEntityImages?.Values?.FirstOrDefault();");
-		generatedSource.Should().Contain("var preImage = preImageEntity != null ? new PreImage(preImageEntity) : null;");
+		generatedSource.Should().Contain("var preImage = preImageEntity != null ? new TestPlugin_Account_Update_PostOperationPreImage(preImageEntity) : null;");
 		generatedSource.Should().Contain("service.HandleAccountUpdate(preImage)");
 
 		// Should have using statement
@@ -221,7 +260,7 @@ public partial class WrapperClassGenerationTests
 
 		// Verify PostImage handling (now inline instead of using PluginImageHelper)
 		generatedSource.Should().Contain("var postImageEntity = context?.PostEntityImages?.Values?.FirstOrDefault();");
-		generatedSource.Should().Contain("var postImage = postImageEntity != null ? new PostImage(postImageEntity) : null;");
+		generatedSource.Should().Contain("var postImage = postImageEntity != null ? new TestPlugin_Account_Update_PostOperationPostImage(postImageEntity) : null;");
 		generatedSource.Should().Contain("service.HandleAccountUpdate(postImage)");
 
 		// Should have using statement
@@ -248,9 +287,9 @@ public partial class WrapperClassGenerationTests
 
 		// Verify both images are handled (now inline instead of using PluginImageHelper)
 		generatedSource.Should().Contain("var preImageEntity = context?.PreEntityImages?.Values?.FirstOrDefault();");
-		generatedSource.Should().Contain("var preImage = preImageEntity != null ? new PreImage(preImageEntity) : null;");
+		generatedSource.Should().Contain("var preImage = preImageEntity != null ? new TestPlugin_Account_Update_PostOperationPreImage(preImageEntity) : null;");
 		generatedSource.Should().Contain("var postImageEntity = context?.PostEntityImages?.Values?.FirstOrDefault();");
-		generatedSource.Should().Contain("var postImage = postImageEntity != null ? new PostImage(postImageEntity) : null;");
+		generatedSource.Should().Contain("var postImage = postImageEntity != null ? new TestPlugin_Account_Update_PostOperationPostImage(postImageEntity) : null;");
 		generatedSource.Should().Contain("service.HandleAccountUpdate(preImage, postImage)");
 
 		// Should have using statement
@@ -277,15 +316,15 @@ public partial class WrapperClassGenerationTests
 		var generatedSource = result.GeneratedTrees[0].GetText().ToString();
 
 		// Verify ActionWrapper class structure is generated
-		generatedSource.Should().Contain("internal sealed class ActionWrapper : IActionWrapper");
+		generatedSource.Should().Contain("internal sealed class TestPlugin_Account_Update_PostOperationStepAction : IActionWrapper");
 		generatedSource.Should().Contain("public Action<IExtendedServiceProvider> CreateAction()");
 
 		// Verify service method is called WITHOUT any image parameters
 		generatedSource.Should().Contain("service.HandleUpdate()");
 
 		// Verify NO PreImage or PostImage classes are generated
-		generatedSource.Should().NotContain("public class PreImage");
-		generatedSource.Should().NotContain("public class PostImage");
+		generatedSource.Should().NotContain("class TestPlugin_Account_Update_PostOperationPreImage");
+		generatedSource.Should().NotContain("class TestPlugin_Account_Update_PostOperationPostImage");
 
 		// Verify NO image entity retrieval is generated
 		generatedSource.Should().NotContain("PreEntityImages");
@@ -349,7 +388,7 @@ public partial class WrapperClassGenerationTests
 		var generatedSource = result.GeneratedTrees[0].GetText().ToString();
 
 		// Verify PreImage class is generated
-		generatedSource.Should().Contain($"public sealed class PreImage : IPluginPreImage<{ContextNamespace}.Account>");
+		generatedSource.Should().Contain($"public sealed class TestPlugin_Account_Update_PostOperationPreImage : IPluginPreImage<{ContextNamespace}.Account>");
 
 		// Verify that multiple entity properties are present (full entity = all properties)
 		generatedSource.Should().Contain("public string? Name => Entity.Name;");
@@ -357,7 +396,7 @@ public partial class WrapperClassGenerationTests
 		generatedSource.Should().Contain("public string? AccountNumber => Entity.AccountNumber;");
 
 		// Verify NO PostImage class is generated
-		generatedSource.Should().NotContain("public sealed class PostImage");
+		generatedSource.Should().NotContain("class TestPlugin_Account_Update_PostOperationPostImage");
 	}
 
 	[Fact]
@@ -376,7 +415,7 @@ public partial class WrapperClassGenerationTests
 		var generatedSource = result.GeneratedTrees[0].GetText().ToString();
 
 		// Verify PostImage class is generated
-		generatedSource.Should().Contain($"public sealed class PostImage : IPluginPostImage<{ContextNamespace}.Account>");
+		generatedSource.Should().Contain($"public sealed class TestPlugin_Account_Update_PostOperationPostImage : IPluginPostImage<{ContextNamespace}.Account>");
 
 		// Verify that multiple entity properties are present (full entity = all properties)
 		generatedSource.Should().Contain("public string? Name => Entity.Name;");
@@ -384,7 +423,7 @@ public partial class WrapperClassGenerationTests
 		generatedSource.Should().Contain("public string? AccountNumber => Entity.AccountNumber;");
 
 		// Verify NO PreImage class is generated
-		generatedSource.Should().NotContain("public sealed class PreImage");
+		generatedSource.Should().NotContain("class TestPlugin_Account_Update_PostOperationPreImage");
 	}
 
 	[Fact]
@@ -402,9 +441,9 @@ public partial class WrapperClassGenerationTests
 		var generatedSource = result.GeneratedTrees[0].GetText().ToString();
 
 		// Verify ActionWrapper is generated and handles the PreImage
-		generatedSource.Should().Contain("internal sealed class ActionWrapper : IActionWrapper");
+		generatedSource.Should().Contain("internal sealed class TestPlugin_Account_Update_PostOperationStepAction : IActionWrapper");
 		generatedSource.Should().Contain("var preImageEntity = context?.PreEntityImages?.Values?.FirstOrDefault();");
-		generatedSource.Should().Contain("var preImage = preImageEntity != null ? new PreImage(preImageEntity) : null;");
+		generatedSource.Should().Contain("var preImage = preImageEntity != null ? new TestPlugin_Account_Update_PostOperationPreImage(preImageEntity) : null;");
 		generatedSource.Should().Contain("service.HandleAccountUpdate(preImage)");
 
 		// Should NOT have PostImage retrieval
@@ -435,7 +474,7 @@ public partial class WrapperClassGenerationTests
 		generatedSource.Should().NotContain("[System.Obsolete]\n\t\tpublic string? Name");
 	}
 
-	[System.Text.RegularExpressions.GeneratedRegex(@"namespace\s+TestNamespace\.PluginRegistrations\.TestPlugin\.AccountUpdatePostOperation")]
+	[System.Text.RegularExpressions.GeneratedRegex(@"namespace\s+TestNamespace\b")]
 	private static partial System.Text.RegularExpressions.Regex IsAccountUpdatePostOperationNamespace();
 
 	[System.Text.RegularExpressions.GeneratedRegex(@"\[CompilerGenerated\]")]

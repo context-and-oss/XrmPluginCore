@@ -52,7 +52,10 @@ internal static class Constants
 	public const string PropertyMethodName = "MethodName";
 	public const string PropertyHasPreImage = "HasPreImage";
 	public const string PropertyHasPostImage = "HasPostImage";
-	public const string PropertyImageNamespace = "ImageNamespace";
+	// Fully-qualified names of the generated image wrapper types, passed to the code fixes so handler
+	// signatures reference them directly (no using/alias needed — they live in the plugin's namespace).
+	public const string PropertyPreImageType = "PreImageType";
+	public const string PropertyPostImageType = "PostImageType";
 	public const string PropertyHasArguments = "HasArguments";
 
 	// Diagnostic property keys for Custom API handler fixes

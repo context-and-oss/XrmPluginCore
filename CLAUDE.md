@@ -486,11 +486,18 @@ Registration is automated using XrmSync (https://github.com/context-and-oss/XrmS
 
 ## Versioning
 
-Version numbers are managed through CHANGELOG.md files:
+Local builds and CI previews derive their versions from the changelogs:
 - `XrmPluginCore/CHANGELOG.md` for the main library and source generator (both use the same version)
 - `XrmPluginCore.Abstractions/CHANGELOG.md` for abstractions
 
 `Directory.Build.targets` derives each project's `<Version>` from the latest `### v...` entry in the relevant CHANGELOG.md at build time — no script or CI step required. Core and the source generator share `XrmPluginCore/CHANGELOG.md`; Abstractions overrides `ChangelogPath` in its .csproj to use its own changelog. An explicit `-p:Version=...` still overrides the derived value.
+
+Published versions come from Git tags, not the changelogs:
+
+- `core-vX.Y.Z` releases `XrmPluginCore` at `X.Y.Z`, including the bundled source generator at the same version.
+- `abstractions-vX.Y.Z` releases only `XrmPluginCore.Abstractions` at `X.Y.Z`.
+
+Create the appropriate tag on the commit to release and publish the tag to GitHub. The release workflow runs the solution tests, publishes only the selected package to NuGet, then creates a GitHub release with `gh` and attaches the NuGet and symbol packages. Use a new version for each release. If Core needs a new Abstractions version, release Abstractions first and make sure its top changelog entry in the Core release commit matches that published version: Core uses that entry for its NuGet dependency, not the Core tag.
 
 The pending (not-yet-released) entry is marked `### vX.Y.Z - Unreleased` instead of a date. Only the version number is parsed (the ` - Unreleased`/date suffix is ignored), so this doesn't affect the derived `<Version>`. Add new changes to that existing `- Unreleased` entry rather than creating a new heading; when the version is released, replace `Unreleased` with the release date.
 

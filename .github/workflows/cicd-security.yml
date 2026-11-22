@@ -1,0 +1,90 @@
+name: cicd security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cicd-security-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Upgrade the released security module, installer and engine together.
+  DAGGER_VERSION: '0.20.8'
+  CICD_SECURITY_MODULE: github.com/context-and-oss/cicd/src/security@v6.0.1
+
+jobs:
+  # Additive: keep this separate from the required `ci` check during adoption.
+  scan-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Test security reporting
+        run: python3 -B -m unittest discover -s tests/ci -v
+
+      - name: Install Dagger
+        uses: context-and-oss/cicd/.github/actions/install-dagger@87398c6abd7b85b09c4c814870941106c6291abb # v6.0.1
+        with:
+          version: ${{ env.DAGGER_VERSION }}
+
+      - name: Scan source
+        id: scan
+        env:
+          SCAN_BRANCH: ${{ github.head_ref || github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/cicd-security-evidence"
+          mkdir -p "$evidence"
+          rm -f "$evidence/evidence-security.json"
+          excludes=(--exclude .git --exclude nupkg)
+          for project in XrmPluginCore XrmPluginCore.Abstractions XrmPluginCore.SourceGenerator \
+            XrmPluginCore.SourceGenerator.Tests XrmPluginCore.Tests XrmPluginCore.Tests.Context; do
+            excludes+=(--exclude "$project/bin" --exclude "$project/obj")
+          done
+          dagger -m "$CICD_SECURITY_MODULE" call scan-source \
+            --src . --fail-on HIGH "${excludes[@]}" \
+            --commit-sha "$GITHUB_SHA" \
+            --branch "$SCAN_BRANCH" \
+            --repo-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            export --path "$evidence/evidence-security.json"
+
+      - name: Summarize evidence
+        if: ${{ !cancelled() }}
+        env:
+          SCAN_OUTCOME: ${{ steps.scan.outcome }}
+        shell: bash
+        run: |
+          if [[ "$SCAN_OUTCOME" != success ]]; then
+            printf '### cicd source security\n\nNo verified scan result. Check the setup and scan step logs.\n' >> "$GITHUB_STEP_SUMMARY"
+          else
+            python3 scripts/security-summary.py "$RUNNER_TEMP/cicd-security-evidence/evidence-security.json" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload evidence
+        if: ${{ !cancelled() && steps.scan.outcome != 'skipped' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: cicd-security-evidence-${{ github.sha }}
+          path: ${{ runner.temp }}/cicd-security-evidence/evidence-security.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      # Export success alone does not mean the scanners passed the policy.
+      - name: Verdict
+        shell: bash
+        run: |
+          if ! jq -e '.passed == true' "$RUNNER_TEMP/cicd-security-evidence/evidence-security.json" > /dev/null; then
+            echo '::error::cicd source security did not pass. See the job summary and evidence artifact.'
+            exit 1
+          fi

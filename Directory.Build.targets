@@ -5,9 +5,10 @@
        Abstractions versions independently and overrides ChangelogPath to its own.
 
        This lives in .targets (not .props) so a csproj-level ChangelogPath override
-       (and IsPackable) is already evaluated. Version is set unconditionally from the
-       changelog (overriding the SDK's 1.0.0 default); an explicit command-line
-       -p:Version=... is a global property and still takes precedence. -->
+       (and IsPackable) is already evaluated. Release builds override this default
+       for only the tagged package (including the bundled generator for Core), so a
+       Core release retains the independently versioned Abstractions dependency.
+       An explicit command-line -p:Version=... is global and still takes precedence. -->
   <PropertyGroup Condition="!$(MSBuildProjectName.EndsWith('.Tests'))">
     <ChangelogPath Condition="'$(ChangelogPath)' == ''">$(MSBuildThisFileDirectory)XrmPluginCore\CHANGELOG.md</ChangelogPath>
     <_ChangelogVersionLine Condition="Exists('$(ChangelogPath)')">$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(ChangelogPath)')), '(?m)^### v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9\-\.]+)?'))</_ChangelogVersionLine>
@@ -15,6 +16,11 @@
     <Version Condition="'$(_ChangelogVersionLine)' != ''">$(_ChangelogVersionLine.Substring(5))</Version>
     <!-- Fallback when no changelog entry is found (e.g. a missing changelog) -->
     <Version Condition="'$(_ChangelogVersionLine)' == ''">1.0.0-local</Version>
+    <_VersionSource>$(ChangelogPath)</_VersionSource>
+    <_ReleaseVersion Condition="'$(MSBuildProjectName)' == 'XrmPluginCore' Or '$(MSBuildProjectName)' == 'XrmPluginCore.SourceGenerator'">$(ReleaseCoreVersion)</_ReleaseVersion>
+    <_ReleaseVersion Condition="'$(MSBuildProjectName)' == 'XrmPluginCore.Abstractions'">$(ReleaseAbstractionsVersion)</_ReleaseVersion>
+    <Version Condition="'$(_ReleaseVersion)' != ''">$(_ReleaseVersion)</Version>
+    <_VersionSource Condition="'$(_ReleaseVersion)' != ''">release tag</_VersionSource>
   </PropertyGroup>
 
   <!-- Package metadata shared by all packable projects. -->
@@ -37,14 +43,13 @@
     <None Include="$(MSBuildThisFileDirectory)resources\contextand.png" Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
 
-  <!-- Echo the changelog-derived version during build for visual confirmation
-       (replaces the "Detected version" output the old version script printed).
+  <!-- Echo the effective version during build for visual confirmation.
        Limited to shipped projects (packable + the bundled source generator) and to
        inner builds (TargetFramework set) so a multi-targeted project prints once per TF
        rather than repeating for the cross-targeting outer build. -->
-  <Target Name="ReportChangelogVersion"
+  <Target Name="ReportProjectVersion"
           BeforeTargets="Build"
           Condition="('$(IsPackable)' != 'false' Or '$(IsRoslynComponent)' == 'true') And '$(TargetFramework)' != '' And '$(ChangelogPath)' != ''">
-    <Message Importance="high" Text="$(MSBuildProjectName) ($(TargetFramework)) version: $(Version) (from $([System.IO.Path]::GetFullPath('$(ChangelogPath)')))" />
+    <Message Importance="high" Text="$(MSBuildProjectName) ($(TargetFramework)) version: $(Version) (from $(_VersionSource))" />
   </Target>
 </Project>

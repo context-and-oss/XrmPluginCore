@@ -2,7 +2,6 @@
 # Version: 1.0.0
 # Updated: 25-09-2023
 # Location: Root
-# Distribution: DotNet8
 # Inspired by: https://docs.microsoft.com/en-us/dotnet/fundamentals/code-analysis/code-style-rule-options
 
 ##########################################
@@ -524,6 +523,6 @@ dotnet_diagnostic.CA1871.severity = none	# ThrowIfNull is an acceptable performa
 dotnet_diagnostic.CA1859.severity = none	# We will accept a performance hit in order to use generics
 dotnet_diagnostic.CA1515.severity = none    # We allow controllers to be public
 
-dotnet_diagnostic.S3925.severity = none		# rule that requires an implementation that is obsolete in .Net8
+dotnet_diagnostic.S3925.severity = none		# rule that requires an implementation that is obsolete on modern .NET
 
 dotnet_diagnostic.SA1010.severity = none    # Disabled until fix for C#12 has been released for collection expressions

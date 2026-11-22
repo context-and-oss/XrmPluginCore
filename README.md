@@ -347,3 +347,9 @@ Contributions are welcome! Please submit a pull request or open an issue to disc
 ## License
 
 This project is licensed under the MIT License.
+
+### Source security checks
+
+The [cicd security workflow](.github/workflows/cicd-security.yml) scans pull requests targeting `main`, pushes to `main`, and manual runs using the cicd source-security module. It checks source code, secrets, and dependencies. It is separate from the required `ci` job and does not change the Windows build, tests, packaging, or NuGet publishing.
+
+Open the run summary for the verdict and scanner coverage, or download `cicd-security-evidence-<SHA>` for the full findings. The job fails if the scan cannot produce valid evidence or if the module rejects it at the `HIGH` threshold. Review any skipped scanners and coverage warnings even when the job passes. Keep the scan non-required until its initial results have been reviewed.

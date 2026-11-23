@@ -46,18 +46,19 @@ jobs:
           set -euo pipefail
           evidence="$RUNNER_TEMP/cicd-security-evidence"
           mkdir -p "$evidence"
-          rm -f "$evidence/evidence-security.json"
+          rm -f "$evidence/evidence-security.json" "$evidence/summary.md" "$evidence/execution.log"
           excludes=(--exclude .git --exclude nupkg)
           for project in XrmPluginCore XrmPluginCore.Abstractions XrmPluginCore.SourceGenerator \
             XrmPluginCore.SourceGenerator.Tests XrmPluginCore.Tests XrmPluginCore.Tests.Context; do
             excludes+=(--exclude "$project/bin" --exclude "$project/obj")
           done
+          # Keep the raw execution trace in the artifact, not the runner command stream.
           dagger -m "$CICD_SECURITY_MODULE" call scan-source \
             --src . --fail-on HIGH "${excludes[@]}" \
             --commit-sha "$GITHUB_SHA" \
             --branch "$SCAN_BRANCH" \
             --repo-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
-            export --path "$evidence/evidence-security.json"
+            export --path "$evidence/evidence-security.json" > "$evidence/execution.log" 2>&1
 
       - name: Summarize evidence
         if: ${{ !cancelled() }}
@@ -65,18 +66,18 @@ jobs:
           SCAN_OUTCOME: ${{ steps.scan.outcome }}
         shell: bash
         run: |
-          if [[ "$SCAN_OUTCOME" != success ]]; then
-            printf '### cicd source security\n\nNo verified scan result. Check the setup and scan step logs.\n' >> "$GITHUB_STEP_SUMMARY"
-          else
-            python3 scripts/security-summary.py "$RUNNER_TEMP/cicd-security-evidence/evidence-security.json" >> "$GITHUB_STEP_SUMMARY"
-          fi
+          python3 scripts/security-summary.py "$RUNNER_TEMP/cicd-security-evidence/evidence-security.json" \
+            --scan-outcome "${SCAN_OUTCOME:-skipped}"
 
       - name: Upload evidence
-        if: ${{ !cancelled() && steps.scan.outcome != 'skipped' }}
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: cicd-security-evidence-${{ github.sha }}
-          path: ${{ runner.temp }}/cicd-security-evidence/evidence-security.json
+          path: |
+            ${{ runner.temp }}/cicd-security-evidence/evidence-security.json
+            ${{ runner.temp }}/cicd-security-evidence/summary.md
+            ${{ runner.temp }}/cicd-security-evidence/execution.log
           if-no-files-found: warn
           retention-days: 30
 
